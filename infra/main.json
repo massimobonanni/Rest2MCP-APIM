@@ -1,0 +1,1433 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2018-05-01/subscriptionDeploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "metadata": {
+    "_generator": {
+      "name": "bicep",
+      "version": "0.42.1.51946",
+      "templateHash": "4068703770193621140"
+    }
+  },
+  "parameters": {
+    "environmentName": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64,
+      "metadata": {
+        "description": "Name of the environment. Used to generate unique resource names."
+      }
+    },
+    "location": {
+      "type": "string",
+      "minLength": 1,
+      "metadata": {
+        "description": "Azure region for all resources."
+      }
+    },
+    "apimPublisherName": {
+      "type": "string",
+      "defaultValue": "Contoso",
+      "metadata": {
+        "description": "Publisher organisation name for APIM."
+      }
+    },
+    "apimPublisherEmail": {
+      "type": "string",
+      "metadata": {
+        "description": "Publisher email for APIM. Required by the APIM service."
+      }
+    },
+    "apimSkuName": {
+      "type": "string",
+      "defaultValue": "Developer",
+      "allowedValues": [
+        "Developer",
+        "StandardV2"
+      ],
+      "metadata": {
+        "description": "APIM SKU tier. Use Developer for demos, StandardV2 for production."
+      }
+    },
+    "tenantId": {
+      "type": "string",
+      "defaultValue": "[subscription().tenantId]",
+      "metadata": {
+        "description": "Azure AD / Entra ID tenant ID used for JWT validation in APIM policy."
+      }
+    },
+    "eventHubConnectionString": {
+      "type": "securestring",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Optional Event Hub connection string for APIM usage logging. Leave empty to skip."
+      }
+    }
+  },
+  "variables": {
+    "resourceSuffix": "[take(uniqueString(subscription().id, parameters('environmentName'), parameters('location')), 6)]",
+    "abbrev": "[take(replace(toLower(parameters('environmentName')), '-', ''), 10)]",
+    "tags": {
+      "azd-env-name": "[parameters('environmentName')]",
+      "environment": "[parameters('environmentName')]",
+      "project": "apim-mcp-demo"
+    },
+    "storageAccountName": "[format('st{0}{1}', variables('abbrev'), variables('resourceSuffix'))]",
+    "logAnalyticsName": "[format('log-{0}-{1}', variables('abbrev'), variables('resourceSuffix'))]",
+    "appInsightsName": "[format('appi-{0}-{1}', variables('abbrev'), variables('resourceSuffix'))]",
+    "functionAppName": "[format('func-{0}-{1}', variables('abbrev'), variables('resourceSuffix'))]",
+    "apimName": "[format('apim-{0}-{1}', variables('abbrev'), variables('resourceSuffix'))]"
+  },
+  "resources": [
+    {
+      "type": "Microsoft.Resources/resourceGroups",
+      "apiVersion": "2023-07-01",
+      "name": "[format('rg-{0}', parameters('environmentName'))]",
+      "location": "[parameters('location')]",
+      "tags": "[variables('tags')]"
+    },
+    {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "storage",
+      "resourceGroup": "[format('rg-{0}', parameters('environmentName'))]",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "name": {
+            "value": "[variables('storageAccountName')]"
+          },
+          "location": {
+            "value": "[parameters('location')]"
+          },
+          "tags": {
+            "value": "[variables('tags')]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.42.1.51946",
+              "templateHash": "10910393051649404330"
+            }
+          },
+          "parameters": {
+            "name": {
+              "type": "string",
+              "metadata": {
+                "description": "Name of the storage account. Max 24 lowercase alphanumeric characters."
+              }
+            },
+            "location": {
+              "type": "string",
+              "defaultValue": "[resourceGroup().location]",
+              "metadata": {
+                "description": "Azure region."
+              }
+            },
+            "tags": {
+              "type": "object",
+              "defaultValue": {},
+              "metadata": {
+                "description": "Resource tags."
+              }
+            }
+          },
+          "resources": [
+            {
+              "type": "Microsoft.Storage/storageAccounts",
+              "apiVersion": "2023-01-01",
+              "name": "[parameters('name')]",
+              "location": "[parameters('location')]",
+              "tags": "[parameters('tags')]",
+              "sku": {
+                "name": "Standard_LRS"
+              },
+              "kind": "StorageV2",
+              "properties": {
+                "minimumTlsVersion": "TLS1_2",
+                "allowBlobPublicAccess": false,
+                "allowSharedKeyAccess": false,
+                "supportsHttpsTrafficOnly": true,
+                "networkAcls": {
+                  "defaultAction": "Allow"
+                }
+              }
+            },
+            {
+              "type": "Microsoft.Storage/storageAccounts/blobServices",
+              "apiVersion": "2023-01-01",
+              "name": "[format('{0}/{1}', parameters('name'), 'default')]",
+              "dependsOn": [
+                "[resourceId('Microsoft.Storage/storageAccounts', parameters('name'))]"
+              ]
+            },
+            {
+              "type": "Microsoft.Storage/storageAccounts/blobServices/containers",
+              "apiVersion": "2023-01-01",
+              "name": "[format('{0}/{1}/{2}', parameters('name'), 'default', 'deploymentpackage')]",
+              "properties": {
+                "publicAccess": "None"
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Storage/storageAccounts/blobServices', parameters('name'), 'default')]"
+              ]
+            }
+          ],
+          "outputs": {
+            "name": {
+              "type": "string",
+              "value": "[parameters('name')]"
+            },
+            "id": {
+              "type": "string",
+              "value": "[resourceId('Microsoft.Storage/storageAccounts', parameters('name'))]"
+            },
+            "primaryBlobEndpoint": {
+              "type": "string",
+              "value": "[reference(resourceId('Microsoft.Storage/storageAccounts', parameters('name')), '2023-01-01').primaryEndpoints.blob]"
+            }
+          }
+        }
+      },
+      "dependsOn": [
+        "[subscriptionResourceId('Microsoft.Resources/resourceGroups', format('rg-{0}', parameters('environmentName')))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "monitoring",
+      "resourceGroup": "[format('rg-{0}', parameters('environmentName'))]",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "logAnalyticsName": {
+            "value": "[variables('logAnalyticsName')]"
+          },
+          "applicationInsightsName": {
+            "value": "[variables('appInsightsName')]"
+          },
+          "location": {
+            "value": "[parameters('location')]"
+          },
+          "tags": {
+            "value": "[variables('tags')]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.42.1.51946",
+              "templateHash": "16025035795742000501"
+            }
+          },
+          "parameters": {
+            "logAnalyticsName": {
+              "type": "string",
+              "metadata": {
+                "description": "Name of the Log Analytics Workspace."
+              }
+            },
+            "applicationInsightsName": {
+              "type": "string",
+              "metadata": {
+                "description": "Name of the Application Insights component."
+              }
+            },
+            "location": {
+              "type": "string",
+              "defaultValue": "[resourceGroup().location]",
+              "metadata": {
+                "description": "Azure region."
+              }
+            },
+            "tags": {
+              "type": "object",
+              "defaultValue": {},
+              "metadata": {
+                "description": "Resource tags."
+              }
+            }
+          },
+          "resources": [
+            {
+              "type": "Microsoft.OperationalInsights/workspaces",
+              "apiVersion": "2023-09-01",
+              "name": "[parameters('logAnalyticsName')]",
+              "location": "[parameters('location')]",
+              "tags": "[parameters('tags')]",
+              "properties": {
+                "sku": {
+                  "name": "PerGB2018"
+                },
+                "retentionInDays": 30,
+                "features": {
+                  "enableLogAccessUsingOnlyResourcePermissions": true
+                }
+              }
+            },
+            {
+              "type": "Microsoft.Insights/components",
+              "apiVersion": "2020-02-02",
+              "name": "[parameters('applicationInsightsName')]",
+              "location": "[parameters('location')]",
+              "tags": "[parameters('tags')]",
+              "kind": "web",
+              "properties": {
+                "Application_Type": "web",
+                "WorkspaceResourceId": "[resourceId('Microsoft.OperationalInsights/workspaces', parameters('logAnalyticsName'))]",
+                "RetentionInDays": 30,
+                "IngestionMode": "LogAnalytics",
+                "publicNetworkAccessForIngestion": "Enabled",
+                "publicNetworkAccessForQuery": "Enabled"
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.OperationalInsights/workspaces', parameters('logAnalyticsName'))]"
+              ]
+            }
+          ],
+          "outputs": {
+            "logAnalyticsWorkspaceId": {
+              "type": "string",
+              "value": "[resourceId('Microsoft.OperationalInsights/workspaces', parameters('logAnalyticsName'))]"
+            },
+            "applicationInsightsName": {
+              "type": "string",
+              "value": "[parameters('applicationInsightsName')]"
+            },
+            "applicationInsightsId": {
+              "type": "string",
+              "value": "[resourceId('Microsoft.Insights/components', parameters('applicationInsightsName'))]"
+            },
+            "applicationInsightsConnectionString": {
+              "type": "string",
+              "value": "[reference(resourceId('Microsoft.Insights/components', parameters('applicationInsightsName')), '2020-02-02').ConnectionString]"
+            },
+            "applicationInsightsInstrumentationKey": {
+              "type": "string",
+              "value": "[reference(resourceId('Microsoft.Insights/components', parameters('applicationInsightsName')), '2020-02-02').InstrumentationKey]"
+            }
+          }
+        }
+      },
+      "dependsOn": [
+        "[subscriptionResourceId('Microsoft.Resources/resourceGroups', format('rg-{0}', parameters('environmentName')))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "functions",
+      "resourceGroup": "[format('rg-{0}', parameters('environmentName'))]",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "name": {
+            "value": "[variables('functionAppName')]"
+          },
+          "location": {
+            "value": "[parameters('location')]"
+          },
+          "tags": {
+            "value": "[variables('tags')]"
+          },
+          "storageAccountName": {
+            "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, format('rg-{0}', parameters('environmentName'))), 'Microsoft.Resources/deployments', 'storage'), '2025-04-01').outputs.name.value]"
+          },
+          "applicationInsightsConnectionString": {
+            "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, format('rg-{0}', parameters('environmentName'))), 'Microsoft.Resources/deployments', 'monitoring'), '2025-04-01').outputs.applicationInsightsConnectionString.value]"
+          },
+          "azdServiceName": {
+            "value": "functions"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.42.1.51946",
+              "templateHash": "5928722358217301412"
+            }
+          },
+          "parameters": {
+            "name": {
+              "type": "string",
+              "metadata": {
+                "description": "Name of the Function App."
+              }
+            },
+            "location": {
+              "type": "string",
+              "defaultValue": "[resourceGroup().location]",
+              "metadata": {
+                "description": "Azure region."
+              }
+            },
+            "tags": {
+              "type": "object",
+              "defaultValue": {},
+              "metadata": {
+                "description": "Resource tags."
+              }
+            },
+            "storageAccountName": {
+              "type": "string",
+              "metadata": {
+                "description": "Name of the storage account used by the Function App runtime."
+              }
+            },
+            "applicationInsightsConnectionString": {
+              "type": "string",
+              "metadata": {
+                "description": "Application Insights connection string."
+              }
+            },
+            "azdServiceName": {
+              "type": "string",
+              "defaultValue": "functions",
+              "metadata": {
+                "description": "AZD service name tag value — must match the key in azure.yaml."
+              }
+            }
+          },
+          "resources": [
+            {
+              "type": "Microsoft.Web/serverfarms",
+              "apiVersion": "2024-04-01",
+              "name": "[format('plan-{0}', parameters('name'))]",
+              "location": "[parameters('location')]",
+              "tags": "[parameters('tags')]",
+              "sku": {
+                "name": "FC1",
+                "tier": "FlexConsumption"
+              },
+              "properties": {
+                "reserved": true
+              }
+            },
+            {
+              "type": "Microsoft.Web/sites",
+              "apiVersion": "2024-04-01",
+              "name": "[parameters('name')]",
+              "location": "[parameters('location')]",
+              "tags": "[union(parameters('tags'), createObject('azd-service-name', parameters('azdServiceName')))]",
+              "kind": "functionapp,linux",
+              "identity": {
+                "type": "SystemAssigned"
+              },
+              "properties": {
+                "serverFarmId": "[resourceId('Microsoft.Web/serverfarms', format('plan-{0}', parameters('name')))]",
+                "httpsOnly": true,
+                "functionAppConfig": {
+                  "deployment": {
+                    "storage": {
+                      "type": "blobContainer",
+                      "value": "[format('{0}deploymentpackage', reference(resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccountName')), '2023-01-01').primaryEndpoints.blob)]",
+                      "authentication": {
+                        "type": "SystemAssignedIdentity"
+                      }
+                    }
+                  },
+                  "scaleAndConcurrency": {
+                    "maximumInstanceCount": 40,
+                    "instanceMemoryMB": 2048
+                  },
+                  "runtime": {
+                    "name": "dotnet-isolated",
+                    "version": "8.0"
+                  }
+                },
+                "siteConfig": {
+                  "appSettings": [
+                    {
+                      "name": "AzureWebJobsStorage__blobServiceUri",
+                      "value": "[reference(resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccountName')), '2023-01-01').primaryEndpoints.blob]"
+                    },
+                    {
+                      "name": "AzureWebJobsStorage__queueServiceUri",
+                      "value": "[reference(resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccountName')), '2023-01-01').primaryEndpoints.queue]"
+                    },
+                    {
+                      "name": "AzureWebJobsStorage__tableServiceUri",
+                      "value": "[reference(resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccountName')), '2023-01-01').primaryEndpoints.table]"
+                    },
+                    {
+                      "name": "APPLICATIONINSIGHTS_CONNECTION_STRING",
+                      "value": "[parameters('applicationInsightsConnectionString')]"
+                    },
+                    {
+                      "name": "FUNCTIONS_EXTENSION_VERSION",
+                      "value": "~4"
+                    },
+                    {
+                      "name": "FUNCTIONS_WORKER_RUNTIME",
+                      "value": "dotnet-isolated"
+                    }
+                  ]
+                }
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Web/serverfarms', format('plan-{0}', parameters('name')))]"
+              ]
+            },
+            {
+              "type": "Microsoft.Authorization/roleAssignments",
+              "apiVersion": "2022-04-01",
+              "scope": "[resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccountName'))]",
+              "name": "[guid(resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccountName')), resourceId('Microsoft.Web/sites', parameters('name')), 'b7e6dc6d-f1e8-4753-8033-0f276bb0955b')]",
+              "properties": {
+                "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', 'b7e6dc6d-f1e8-4753-8033-0f276bb0955b')]",
+                "principalId": "[reference(resourceId('Microsoft.Web/sites', parameters('name')), '2024-04-01', 'full').identity.principalId]",
+                "principalType": "ServicePrincipal"
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Web/sites', parameters('name'))]"
+              ]
+            },
+            {
+              "type": "Microsoft.Authorization/roleAssignments",
+              "apiVersion": "2022-04-01",
+              "scope": "[resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccountName'))]",
+              "name": "[guid(resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccountName')), resourceId('Microsoft.Web/sites', parameters('name')), '974c5e8b-45b9-4653-ba55-5f855dd0fb88')]",
+              "properties": {
+                "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '974c5e8b-45b9-4653-ba55-5f855dd0fb88')]",
+                "principalId": "[reference(resourceId('Microsoft.Web/sites', parameters('name')), '2024-04-01', 'full').identity.principalId]",
+                "principalType": "ServicePrincipal"
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Web/sites', parameters('name'))]"
+              ]
+            },
+            {
+              "type": "Microsoft.Authorization/roleAssignments",
+              "apiVersion": "2022-04-01",
+              "scope": "[resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccountName'))]",
+              "name": "[guid(resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccountName')), resourceId('Microsoft.Web/sites', parameters('name')), '0a9a7e0f-7af4-b28a-8b19-81df0a06f4e7')]",
+              "properties": {
+                "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '0a9a7e0f-7af4-b28a-8b19-81df0a06f4e7')]",
+                "principalId": "[reference(resourceId('Microsoft.Web/sites', parameters('name')), '2024-04-01', 'full').identity.principalId]",
+                "principalType": "ServicePrincipal"
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Web/sites', parameters('name'))]"
+              ]
+            }
+          ],
+          "outputs": {
+            "name": {
+              "type": "string",
+              "value": "[parameters('name')]"
+            },
+            "id": {
+              "type": "string",
+              "value": "[resourceId('Microsoft.Web/sites', parameters('name'))]"
+            },
+            "principalId": {
+              "type": "string",
+              "value": "[reference(resourceId('Microsoft.Web/sites', parameters('name')), '2024-04-01', 'full').identity.principalId]"
+            },
+            "functionAppUrl": {
+              "type": "string",
+              "value": "[format('https://{0}', reference(resourceId('Microsoft.Web/sites', parameters('name')), '2024-04-01').defaultHostName)]"
+            },
+            "functionAppHostName": {
+              "type": "string",
+              "value": "[reference(resourceId('Microsoft.Web/sites', parameters('name')), '2024-04-01').defaultHostName]"
+            }
+          }
+        }
+      },
+      "dependsOn": [
+        "[extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, format('rg-{0}', parameters('environmentName'))), 'Microsoft.Resources/deployments', 'monitoring')]",
+        "[subscriptionResourceId('Microsoft.Resources/resourceGroups', format('rg-{0}', parameters('environmentName')))]",
+        "[extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, format('rg-{0}', parameters('environmentName'))), 'Microsoft.Resources/deployments', 'storage')]"
+      ]
+    },
+    {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "apim",
+      "resourceGroup": "[format('rg-{0}', parameters('environmentName'))]",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "name": {
+            "value": "[variables('apimName')]"
+          },
+          "location": {
+            "value": "[parameters('location')]"
+          },
+          "tags": {
+            "value": "[variables('tags')]"
+          },
+          "publisherName": {
+            "value": "[parameters('apimPublisherName')]"
+          },
+          "publisherEmail": {
+            "value": "[parameters('apimPublisherEmail')]"
+          },
+          "skuName": {
+            "value": "[parameters('apimSkuName')]"
+          },
+          "functionAppUrl": {
+            "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, format('rg-{0}', parameters('environmentName'))), 'Microsoft.Resources/deployments', 'functions'), '2025-04-01').outputs.functionAppUrl.value]"
+          },
+          "tenantId": {
+            "value": "[parameters('tenantId')]"
+          },
+          "applicationInsightsInstrumentationKey": {
+            "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, format('rg-{0}', parameters('environmentName'))), 'Microsoft.Resources/deployments', 'monitoring'), '2025-04-01').outputs.applicationInsightsInstrumentationKey.value]"
+          },
+          "eventHubConnectionString": {
+            "value": "[parameters('eventHubConnectionString')]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.42.1.51946",
+              "templateHash": "8668964622188899162"
+            }
+          },
+          "parameters": {
+            "name": {
+              "type": "string",
+              "metadata": {
+                "description": "Name of the APIM instance."
+              }
+            },
+            "location": {
+              "type": "string",
+              "defaultValue": "[resourceGroup().location]",
+              "metadata": {
+                "description": "Azure region."
+              }
+            },
+            "tags": {
+              "type": "object",
+              "defaultValue": {},
+              "metadata": {
+                "description": "Resource tags."
+              }
+            },
+            "publisherName": {
+              "type": "string",
+              "metadata": {
+                "description": "APIM publisher organisation name."
+              }
+            },
+            "publisherEmail": {
+              "type": "string",
+              "metadata": {
+                "description": "APIM publisher email address."
+              }
+            },
+            "skuName": {
+              "type": "string",
+              "defaultValue": "Developer",
+              "allowedValues": [
+                "Developer",
+                "StandardV2"
+              ],
+              "metadata": {
+                "description": "APIM SKU. Developer for demos; StandardV2 for production."
+              }
+            },
+            "functionAppUrl": {
+              "type": "string",
+              "metadata": {
+                "description": "Backend URL for the Function App — stored as a Named Value."
+              }
+            },
+            "tenantId": {
+              "type": "string",
+              "metadata": {
+                "description": "Entra ID tenant ID for JWT validation — stored as a Named Value."
+              }
+            },
+            "applicationInsightsInstrumentationKey": {
+              "type": "string",
+              "metadata": {
+                "description": "Application Insights instrumentation key for APIM logger."
+              }
+            },
+            "eventHubConnectionString": {
+              "type": "securestring",
+              "defaultValue": "",
+              "metadata": {
+                "description": "Optional: Event Hub connection string for usage logging. Leave empty to skip."
+              }
+            }
+          },
+          "resources": [
+            {
+              "type": "Microsoft.ApiManagement/service",
+              "apiVersion": "2023-09-01-preview",
+              "name": "[parameters('name')]",
+              "location": "[parameters('location')]",
+              "tags": "[parameters('tags')]",
+              "sku": {
+                "name": "[parameters('skuName')]",
+                "capacity": 1
+              },
+              "identity": {
+                "type": "SystemAssigned"
+              },
+              "properties": {
+                "publisherName": "[parameters('publisherName')]",
+                "publisherEmail": "[parameters('publisherEmail')]",
+                "customProperties": {
+                  "Microsoft.WindowsAzure.ApiManagement.Gateway.Security.Protocols.Tls10": "false",
+                  "Microsoft.WindowsAzure.ApiManagement.Gateway.Security.Protocols.Tls11": "false",
+                  "Microsoft.WindowsAzure.ApiManagement.Gateway.Security.Protocols.Ssl30": "false"
+                }
+              }
+            },
+            {
+              "type": "Microsoft.ApiManagement/service/loggers",
+              "apiVersion": "2023-09-01-preview",
+              "name": "[format('{0}/{1}', parameters('name'), 'appinsights-logger')]",
+              "properties": {
+                "loggerType": "applicationInsights",
+                "credentials": {
+                  "instrumentationKey": "[parameters('applicationInsightsInstrumentationKey')]"
+                },
+                "isBuffered": true,
+                "resourceId": "",
+                "description": "Application Insights logger for APIM"
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.ApiManagement/service', parameters('name'))]"
+              ]
+            },
+            {
+              "type": "Microsoft.ApiManagement/service/diagnostics",
+              "apiVersion": "2023-09-01-preview",
+              "name": "[format('{0}/{1}', parameters('name'), 'applicationinsights')]",
+              "properties": {
+                "alwaysLog": "allErrors",
+                "loggerId": "[resourceId('Microsoft.ApiManagement/service/loggers', parameters('name'), 'appinsights-logger')]",
+                "sampling": {
+                  "samplingType": "fixed",
+                  "percentage": 100
+                },
+                "frontend": {
+                  "request": {
+                    "headers": [],
+                    "body": {
+                      "bytes": 0
+                    }
+                  },
+                  "response": {
+                    "headers": [],
+                    "body": {
+                      "bytes": 0
+                    }
+                  }
+                },
+                "backend": {
+                  "request": {
+                    "headers": [],
+                    "body": {
+                      "bytes": 0
+                    }
+                  },
+                  "response": {
+                    "headers": [],
+                    "body": {
+                      "bytes": 0
+                    }
+                  }
+                }
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.ApiManagement/service', parameters('name'))]",
+                "[resourceId('Microsoft.ApiManagement/service/loggers', parameters('name'), 'appinsights-logger')]"
+              ]
+            },
+            {
+              "type": "Microsoft.ApiManagement/service/namedValues",
+              "apiVersion": "2023-09-01-preview",
+              "name": "[format('{0}/{1}', parameters('name'), 'tenant-id')]",
+              "properties": {
+                "displayName": "tenant-id",
+                "value": "[parameters('tenantId')]",
+                "secret": false
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.ApiManagement/service', parameters('name'))]"
+              ]
+            },
+            {
+              "type": "Microsoft.ApiManagement/service/namedValues",
+              "apiVersion": "2023-09-01-preview",
+              "name": "[format('{0}/{1}', parameters('name'), 'functions-base-url')]",
+              "properties": {
+                "displayName": "functions-base-url",
+                "value": "[parameters('functionAppUrl')]",
+                "secret": false
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.ApiManagement/service', parameters('name'))]"
+              ]
+            },
+            {
+              "type": "Microsoft.ApiManagement/service/namedValues",
+              "apiVersion": "2023-09-01-preview",
+              "name": "[format('{0}/{1}', parameters('name'), 'apim-host')]",
+              "properties": {
+                "displayName": "apim-host",
+                "value": "[format('{0}.azure-api.net', parameters('name'))]",
+                "secret": false
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.ApiManagement/service', parameters('name'))]"
+              ]
+            },
+            {
+              "condition": "[not(empty(parameters('eventHubConnectionString')))]",
+              "type": "Microsoft.ApiManagement/service/namedValues",
+              "apiVersion": "2023-09-01-preview",
+              "name": "[format('{0}/{1}', parameters('name'), 'eventhub-connection')]",
+              "properties": {
+                "displayName": "eventhub-connection",
+                "value": "[parameters('eventHubConnectionString')]",
+                "secret": true
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.ApiManagement/service', parameters('name'))]"
+              ]
+            }
+          ],
+          "outputs": {
+            "name": {
+              "type": "string",
+              "value": "[parameters('name')]"
+            },
+            "id": {
+              "type": "string",
+              "value": "[resourceId('Microsoft.ApiManagement/service', parameters('name'))]"
+            },
+            "principalId": {
+              "type": "string",
+              "value": "[reference(resourceId('Microsoft.ApiManagement/service', parameters('name')), '2023-09-01-preview', 'full').identity.principalId]"
+            },
+            "gatewayUrl": {
+              "type": "string",
+              "value": "[reference(resourceId('Microsoft.ApiManagement/service', parameters('name')), '2023-09-01-preview').gatewayUrl]"
+            },
+            "gatewayHostname": {
+              "type": "string",
+              "value": "[format('{0}.azure-api.net', parameters('name'))]"
+            }
+          }
+        }
+      },
+      "dependsOn": [
+        "[extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, format('rg-{0}', parameters('environmentName'))), 'Microsoft.Resources/deployments', 'functions')]",
+        "[extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, format('rg-{0}', parameters('environmentName'))), 'Microsoft.Resources/deployments', 'monitoring')]",
+        "[subscriptionResourceId('Microsoft.Resources/resourceGroups', format('rg-{0}', parameters('environmentName')))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "apim-api",
+      "resourceGroup": "[format('rg-{0}', parameters('environmentName'))]",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "apimName": {
+            "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, format('rg-{0}', parameters('environmentName'))), 'Microsoft.Resources/deployments', 'apim'), '2025-04-01').outputs.name.value]"
+          },
+          "functionAppUrl": {
+            "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, format('rg-{0}', parameters('environmentName'))), 'Microsoft.Resources/deployments', 'functions'), '2025-04-01').outputs.functionAppUrl.value]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.42.1.51946",
+              "templateHash": "17762657877592060698"
+            }
+          },
+          "parameters": {
+            "apimName": {
+              "type": "string",
+              "metadata": {
+                "description": "Name of the existing APIM instance."
+              }
+            },
+            "functionAppUrl": {
+              "type": "string",
+              "metadata": {
+                "description": "Function App base URL for the APIM backend service."
+              }
+            }
+          },
+          "variables": {
+            "apiPolicyXml": "<!--\r\n  Azure API Management — API-Level Inbound Policy\r\n  Business Operations Assistant / MCP Tools\r\n  \r\n  Named Values consumed by this policy:\r\n    tenant-id            – Entra ID tenant GUID\r\n    functions-base-url   – Azure Function App base URL\r\n    apim-host            – APIM gateway hostname (used in MCP manifest)\r\n-->\r\n<policies>\r\n\r\n  <inbound>\r\n\r\n    <!-- CORS – allow all origins for demo -->\r\n    <cors allow-credentials=\"false\">\r\n      <allowed-origins>\r\n        <origin>*</origin>\r\n      </allowed-origins>\r\n      <allowed-methods preflight-continue=\"false\">\r\n        <method>GET</method>\r\n        <method>POST</method>\r\n        <method>PATCH</method>\r\n        <method>PUT</method>\r\n        <method>DELETE</method>\r\n        <method>OPTIONS</method>\r\n      </allowed-methods>\r\n      <allowed-headers>\r\n        <header>*</header>\r\n      </allowed-headers>\r\n    </cors>\r\n\r\n    <!-- MCP Tool Manifest – return JSON on GET /mcp -->\r\n    <choose>\r\n      <when condition=\"@(context.Request.Method == &quot;GET&quot; &amp;&amp; context.Request.Url.Path.EndsWith(&quot;/mcp&quot;))\">\r\n        <return-response>\r\n          <set-status code=\"200\" reason=\"OK\" />\r\n          <set-header name=\"Content-Type\" exists-action=\"override\">\r\n            <value>application/json; charset=utf-8</value>\r\n          </set-header>\r\n          <set-body>@{\r\n            return \"{\\\"schema_version\\\":\\\"v1\\\",\\\"name_for_human\\\":\\\"Business Operations Assistant\\\",\\\"name_for_model\\\":\\\"business_ops\\\",\\\"description_for_human\\\":\\\"Search products, manage inventory, create and track IT support tickets, and search the knowledge base.\\\",\\\"description_for_model\\\":\\\"Use these tools to help users with product searches, inventory checks, restock ordering, IT helpdesk ticket management, and knowledge base lookups. Always search the knowledge base before creating a ticket.\\\",\\\"auth\\\":{\\\"type\\\":\\\"service_http\\\",\\\"authorization_type\\\":\\\"bearer\\\"},\\\"api\\\":{\\\"type\\\":\\\"openapi\\\",\\\"url\\\":\\\"https://{{apim-host}}/mcp/openapi.json\\\"},\\\"tools\\\":[{\\\"name\\\":\\\"search_products\\\",\\\"description\\\":\\\"Search the product catalog by keyword and/or category.\\\",\\\"parameters\\\":{\\\"type\\\":\\\"object\\\",\\\"properties\\\":{\\\"q\\\":{\\\"type\\\":\\\"string\\\",\\\"description\\\":\\\"Search keyword\\\"},\\\"category\\\":{\\\"type\\\":\\\"string\\\",\\\"description\\\":\\\"Electronics, Furniture, Office Supplies\\\"}}}},{\\\"name\\\":\\\"get_product\\\",\\\"description\\\":\\\"Get detailed information about a specific product by its ID.\\\",\\\"parameters\\\":{\\\"type\\\":\\\"object\\\",\\\"properties\\\":{\\\"id\\\":{\\\"type\\\":\\\"string\\\"}},\\\"required\\\":[\\\"id\\\"]}},{\\\"name\\\":\\\"check_stock\\\",\\\"description\\\":\\\"Check the current stock level for a product.\\\",\\\"parameters\\\":{\\\"type\\\":\\\"object\\\",\\\"properties\\\":{\\\"id\\\":{\\\"type\\\":\\\"string\\\"}},\\\"required\\\":[\\\"id\\\"]}},{\\\"name\\\":\\\"restock_product\\\",\\\"description\\\":\\\"Create a restock order for a product low on inventory.\\\",\\\"parameters\\\":{\\\"type\\\":\\\"object\\\",\\\"properties\\\":{\\\"productId\\\":{\\\"type\\\":\\\"string\\\"},\\\"quantity\\\":{\\\"type\\\":\\\"integer\\\"},\\\"requestedBy\\\":{\\\"type\\\":\\\"string\\\"},\\\"notes\\\":{\\\"type\\\":\\\"string\\\"}},\\\"required\\\":[\\\"productId\\\",\\\"quantity\\\",\\\"requestedBy\\\"]}},{\\\"name\\\":\\\"list_tickets\\\",\\\"description\\\":\\\"List IT support tickets with optional filters.\\\",\\\"parameters\\\":{\\\"type\\\":\\\"object\\\",\\\"properties\\\":{\\\"status\\\":{\\\"type\\\":\\\"string\\\"},\\\"priority\\\":{\\\"type\\\":\\\"string\\\"},\\\"assignee\\\":{\\\"type\\\":\\\"string\\\"}}}},{\\\"name\\\":\\\"get_ticket\\\",\\\"description\\\":\\\"Get full details of a specific support ticket by ID.\\\",\\\"parameters\\\":{\\\"type\\\":\\\"object\\\",\\\"properties\\\":{\\\"id\\\":{\\\"type\\\":\\\"string\\\"}},\\\"required\\\":[\\\"id\\\"]}},{\\\"name\\\":\\\"create_ticket\\\",\\\"description\\\":\\\"Create a new IT support ticket. Always search the knowledge base first.\\\",\\\"parameters\\\":{\\\"type\\\":\\\"object\\\",\\\"properties\\\":{\\\"title\\\":{\\\"type\\\":\\\"string\\\"},\\\"description\\\":{\\\"type\\\":\\\"string\\\"},\\\"priority\\\":{\\\"type\\\":\\\"string\\\"},\\\"category\\\":{\\\"type\\\":\\\"string\\\"},\\\"requestedBy\\\":{\\\"type\\\":\\\"string\\\"}},\\\"required\\\":[\\\"title\\\",\\\"description\\\",\\\"priority\\\",\\\"category\\\",\\\"requestedBy\\\"]}},{\\\"name\\\":\\\"update_ticket_status\\\",\\\"description\\\":\\\"Update the status of an existing support ticket.\\\",\\\"parameters\\\":{\\\"type\\\":\\\"object\\\",\\\"properties\\\":{\\\"id\\\":{\\\"type\\\":\\\"string\\\"},\\\"status\\\":{\\\"type\\\":\\\"string\\\"},\\\"notes\\\":{\\\"type\\\":\\\"string\\\"},\\\"updatedBy\\\":{\\\"type\\\":\\\"string\\\"}},\\\"required\\\":[\\\"id\\\",\\\"status\\\",\\\"updatedBy\\\"]}},{\\\"name\\\":\\\"search_knowledge_base\\\",\\\"description\\\":\\\"Search the IT knowledge base. Call this before creating a ticket.\\\",\\\"parameters\\\":{\\\"type\\\":\\\"object\\\",\\\"properties\\\":{\\\"q\\\":{\\\"type\\\":\\\"string\\\"},\\\"category\\\":{\\\"type\\\":\\\"string\\\"}},\\\"required\\\":[\\\"q\\\"]}},{\\\"name\\\":\\\"get_kb_article\\\",\\\"description\\\":\\\"Get the full content of a knowledge base article by ID.\\\",\\\"parameters\\\":{\\\"type\\\":\\\"object\\\",\\\"properties\\\":{\\\"id\\\":{\\\"type\\\":\\\"string\\\"}},\\\"required\\\":[\\\"id\\\"]}}]}\";\r\n          }</set-body>\r\n        </return-response>\r\n      </when>\r\n    </choose>\r\n\r\n    <!-- JWT Validation – Entra ID Bearer token required -->\r\n    <validate-jwt header-name=\"Authorization\" failed-validation-httpcode=\"401\"\r\n                  failed-validation-error-message=\"Unauthorized: valid Bearer token required.\"\r\n                  require-expiration-time=\"true\" require-scheme=\"Bearer\" require-signed-tokens=\"true\">\r\n      <openid-config url=\"https://login.microsoftonline.com/{{tenant-id}}/v2.0/.well-known/openid-configuration\" />\r\n      <audiences>\r\n        <audience>api://apim-mcp-demo</audience>\r\n      </audiences>\r\n      <issuers>\r\n        <issuer>https://login.microsoftonline.com/{{tenant-id}}/v2.0</issuer>\r\n        <issuer>https://sts.windows.net/{{tenant-id}}/</issuer>\r\n      </issuers>\r\n    </validate-jwt>\r\n\r\n    <!-- Rate limiting – 60 calls per minute per subscription -->\r\n    <rate-limit-by-key calls=\"60\" renewal-period=\"60\"\r\n                       counter-key=\"@(context.Subscription.Id ?? context.Request.IpAddress)\"\r\n                       increment-condition=\"@(context.Response.StatusCode &lt; 500)\" />\r\n\r\n    <!-- Usage tracing -->\r\n    <trace source=\"apim-mcp-demo\" severity=\"information\">\r\n      <message>@{\r\n        var path = context.Request.Url.Path;\r\n        var segments = path.Split('/');\r\n        var toolHint = segments.Length &gt; 0 ? segments[segments.Length - 1] : \"unknown\";\r\n        return string.Format(\"[MCP] tool={0} subscription={1} method={2}\", toolHint, context.Subscription?.Id ?? \"anonymous\", context.Request.Method);\r\n      }</message>\r\n      <metadata name=\"subscription-id\" value=\"@(context.Subscription?.Id ?? &quot;anonymous&quot;)\" />\r\n      <metadata name=\"request-path\" value=\"@(context.Request.Url.Path)\" />\r\n    </trace>\r\n\r\n    <!-- Strip subscription key before forwarding to backend -->\r\n    <set-header name=\"Ocp-Apim-Subscription-Key\" exists-action=\"delete\" />\r\n\r\n    <!-- Response caching for GET requests – 60 seconds -->\r\n    <cache-lookup vary-by-developer=\"false\" vary-by-developer-groups=\"false\"\r\n                  downstream-caching-type=\"none\" must-revalidate=\"true\">\r\n      <vary-by-query-parameter>*</vary-by-query-parameter>\r\n    </cache-lookup>\r\n\r\n    <!-- Backend URL from Named Value -->\r\n    <set-backend-service base-url=\"{{functions-base-url}}\" />\r\n\r\n  </inbound>\r\n\r\n  <backend>\r\n    <forward-request follow-redirects=\"true\" />\r\n  </backend>\r\n\r\n  <outbound>\r\n\r\n    <!-- Cache successful GET responses -->\r\n    <cache-store duration=\"60\" />\r\n\r\n    <!-- Security response headers -->\r\n    <set-header name=\"X-Content-Type-Options\" exists-action=\"override\">\r\n      <value>nosniff</value>\r\n    </set-header>\r\n    <set-header name=\"X-Frame-Options\" exists-action=\"override\">\r\n      <value>DENY</value>\r\n    </set-header>\r\n\r\n    <base />\r\n  </outbound>\r\n\r\n  <on-error>\r\n    <set-header name=\"Content-Type\" exists-action=\"override\">\r\n      <value>application/json; charset=utf-8</value>\r\n    </set-header>\r\n    <set-body>@(\"{\\\"success\\\":false,\\\"message\\\":\\\"\" + context.LastError.Message + \"\\\"}\")</set-body>\r\n    <base />\r\n  </on-error>\r\n\r\n</policies>\r\n",
+            "writePolicyXml": "<!--\r\n  Azure API Management — Operation-Level Policy Override\r\n  Applied to write operations: POST /api/orders/restock, POST /api/tickets,\r\n  PATCH /api/tickets/{id}/status\r\n  \r\n  Validates the request body as JSON and tags the operation as a write.\r\n  Cache-store is skipped because APIM does not cache non-GET responses.\r\n-->\r\n<policies>\r\n  <inbound>\r\n    <base />\r\n    <validate-content unspecified-content-type-action=\"prevent\"\r\n                      max-size=\"65536\"\r\n                      size-exceeded-action=\"prevent\"\r\n                      errors-variable-name=\"contentErrors\">\r\n      <content type=\"application/json\" validate-as=\"json\" action=\"prevent\" />\r\n    </validate-content>\r\n    <set-header name=\"X-Operation-Type\" exists-action=\"override\">\r\n      <value>write</value>\r\n    </set-header>\r\n  </inbound>\r\n  <backend>\r\n    <base />\r\n  </backend>\r\n  <outbound>\r\n    <base />\r\n  </outbound>\r\n  <on-error>\r\n    <base />\r\n  </on-error>\r\n</policies>\r\n"
+          },
+          "resources": [
+            {
+              "type": "Microsoft.ApiManagement/service/backends",
+              "apiVersion": "2023-09-01-preview",
+              "name": "[format('{0}/{1}', parameters('apimName'), 'functions-backend')]",
+              "properties": {
+                "protocol": "http",
+                "url": "[parameters('functionAppUrl')]",
+                "tls": {
+                  "validateCertificateChain": true,
+                  "validateCertificateName": true
+                },
+                "description": "Azure Functions backend for Business Operations MCP tools"
+              }
+            },
+            {
+              "type": "Microsoft.ApiManagement/service/apis",
+              "apiVersion": "2023-09-01-preview",
+              "name": "[format('{0}/{1}', parameters('apimName'), 'business-ops-api')]",
+              "properties": {
+                "displayName": "Business Operations API",
+                "description": "REST API exposing product catalog, inventory, IT helpdesk, and knowledge base as MCP tools.",
+                "subscriptionRequired": true,
+                "protocols": [
+                  "https"
+                ],
+                "path": "",
+                "serviceUrl": "[parameters('functionAppUrl')]",
+                "isCurrent": true,
+                "apiType": "http"
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.ApiManagement/service/backends', parameters('apimName'), 'functions-backend')]"
+              ]
+            },
+            {
+              "type": "Microsoft.ApiManagement/service/apis/policies",
+              "apiVersion": "2023-09-01-preview",
+              "name": "[format('{0}/{1}/{2}', parameters('apimName'), 'business-ops-api', 'policy')]",
+              "properties": {
+                "value": "[variables('apiPolicyXml')]",
+                "format": "xml"
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.ApiManagement/service/apis', parameters('apimName'), 'business-ops-api')]"
+              ]
+            },
+            {
+              "type": "Microsoft.ApiManagement/service/apis/operations",
+              "apiVersion": "2023-09-01-preview",
+              "name": "[format('{0}/{1}/{2}', parameters('apimName'), 'business-ops-api', 'get-mcp-manifest')]",
+              "properties": {
+                "displayName": "Get MCP Tool Manifest",
+                "method": "GET",
+                "urlTemplate": "/mcp",
+                "description": "Returns the MCP tool manifest JSON. Handled by APIM policy — no backend call."
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.ApiManagement/service/apis', parameters('apimName'), 'business-ops-api')]"
+              ]
+            },
+            {
+              "type": "Microsoft.ApiManagement/service/apis/operations",
+              "apiVersion": "2023-09-01-preview",
+              "name": "[format('{0}/{1}/{2}', parameters('apimName'), 'business-ops-api', 'search-products')]",
+              "properties": {
+                "displayName": "Search Products",
+                "method": "GET",
+                "urlTemplate": "/api/products",
+                "description": "Search the product catalog by keyword and/or category.",
+                "request": {
+                  "queryParameters": [
+                    {
+                      "name": "q",
+                      "description": "Search keyword",
+                      "type": "string",
+                      "required": false
+                    },
+                    {
+                      "name": "category",
+                      "description": "Filter by category: Electronics, Furniture, Office Supplies",
+                      "type": "string",
+                      "required": false
+                    }
+                  ]
+                },
+                "responses": [
+                  {
+                    "statusCode": 200,
+                    "description": "List of matching products"
+                  }
+                ]
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.ApiManagement/service/apis', parameters('apimName'), 'business-ops-api')]"
+              ]
+            },
+            {
+              "type": "Microsoft.ApiManagement/service/apis/operations",
+              "apiVersion": "2023-09-01-preview",
+              "name": "[format('{0}/{1}/{2}', parameters('apimName'), 'business-ops-api', 'get-product')]",
+              "properties": {
+                "displayName": "Get Product",
+                "method": "GET",
+                "urlTemplate": "/api/products/{id}",
+                "description": "Get detailed information about a specific product by its ID.",
+                "templateParameters": [
+                  {
+                    "name": "id",
+                    "description": "The product ID",
+                    "type": "string",
+                    "required": true
+                  }
+                ],
+                "responses": [
+                  {
+                    "statusCode": 200,
+                    "description": "Product details"
+                  },
+                  {
+                    "statusCode": 404,
+                    "description": "Product not found"
+                  }
+                ]
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.ApiManagement/service/apis', parameters('apimName'), 'business-ops-api')]"
+              ]
+            },
+            {
+              "type": "Microsoft.ApiManagement/service/apis/operations",
+              "apiVersion": "2023-09-01-preview",
+              "name": "[format('{0}/{1}/{2}', parameters('apimName'), 'business-ops-api', 'get-product-stock')]",
+              "properties": {
+                "displayName": "Check Product Stock",
+                "method": "GET",
+                "urlTemplate": "/api/products/{id}/stock",
+                "description": "Check current stock level, reorder threshold, and warehouse location for a product.",
+                "templateParameters": [
+                  {
+                    "name": "id",
+                    "description": "The product ID",
+                    "type": "string",
+                    "required": true
+                  }
+                ],
+                "responses": [
+                  {
+                    "statusCode": 200,
+                    "description": "Stock level information"
+                  },
+                  {
+                    "statusCode": 404,
+                    "description": "Product not found"
+                  }
+                ]
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.ApiManagement/service/apis', parameters('apimName'), 'business-ops-api')]"
+              ]
+            },
+            {
+              "type": "Microsoft.ApiManagement/service/apis/operations",
+              "apiVersion": "2023-09-01-preview",
+              "name": "[format('{0}/{1}/{2}', parameters('apimName'), 'business-ops-api', 'create-restock-order')]",
+              "properties": {
+                "displayName": "Create Restock Order",
+                "method": "POST",
+                "urlTemplate": "/api/orders/restock",
+                "description": "Create a pending restock order for a product that is low on inventory.",
+                "request": {
+                  "representations": [
+                    {
+                      "contentType": "application/json",
+                      "examples": {
+                        "default": {
+                          "value": {
+                            "productId": "prod-005",
+                            "quantity": 50,
+                            "requestedBy": "warehouse@company.com",
+                            "notes": "Urgent — stock critically low"
+                          }
+                        }
+                      }
+                    }
+                  ]
+                },
+                "responses": [
+                  {
+                    "statusCode": 201,
+                    "description": "Restock order created"
+                  },
+                  {
+                    "statusCode": 400,
+                    "description": "Invalid request"
+                  },
+                  {
+                    "statusCode": 404,
+                    "description": "Product not found"
+                  }
+                ]
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.ApiManagement/service/apis', parameters('apimName'), 'business-ops-api')]"
+              ]
+            },
+            {
+              "type": "Microsoft.ApiManagement/service/apis/operations/policies",
+              "apiVersion": "2023-09-01-preview",
+              "name": "[format('{0}/{1}/{2}/{3}', parameters('apimName'), 'business-ops-api', 'create-restock-order', 'policy')]",
+              "properties": {
+                "value": "[variables('writePolicyXml')]",
+                "format": "xml"
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.ApiManagement/service/apis/operations', parameters('apimName'), 'business-ops-api', 'create-restock-order')]"
+              ]
+            },
+            {
+              "type": "Microsoft.ApiManagement/service/apis/operations",
+              "apiVersion": "2023-09-01-preview",
+              "name": "[format('{0}/{1}/{2}', parameters('apimName'), 'business-ops-api', 'list-tickets')]",
+              "properties": {
+                "displayName": "List Tickets",
+                "method": "GET",
+                "urlTemplate": "/api/tickets",
+                "description": "List IT support tickets with optional filters for status, priority, and assignee.",
+                "request": {
+                  "queryParameters": [
+                    {
+                      "name": "status",
+                      "description": "Filter by status: open, in-progress, resolved, closed",
+                      "type": "string",
+                      "required": false
+                    },
+                    {
+                      "name": "priority",
+                      "description": "Filter by priority: low, medium, high, critical",
+                      "type": "string",
+                      "required": false
+                    },
+                    {
+                      "name": "assignee",
+                      "description": "Filter by assigned team member email",
+                      "type": "string",
+                      "required": false
+                    }
+                  ]
+                },
+                "responses": [
+                  {
+                    "statusCode": 200,
+                    "description": "List of tickets"
+                  }
+                ]
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.ApiManagement/service/apis', parameters('apimName'), 'business-ops-api')]"
+              ]
+            },
+            {
+              "type": "Microsoft.ApiManagement/service/apis/operations",
+              "apiVersion": "2023-09-01-preview",
+              "name": "[format('{0}/{1}/{2}', parameters('apimName'), 'business-ops-api', 'get-ticket')]",
+              "properties": {
+                "displayName": "Get Ticket",
+                "method": "GET",
+                "urlTemplate": "/api/tickets/{id}",
+                "description": "Get full details of a specific support ticket by its ID.",
+                "templateParameters": [
+                  {
+                    "name": "id",
+                    "description": "The ticket ID",
+                    "type": "string",
+                    "required": true
+                  }
+                ],
+                "responses": [
+                  {
+                    "statusCode": 200,
+                    "description": "Ticket details"
+                  },
+                  {
+                    "statusCode": 404,
+                    "description": "Ticket not found"
+                  }
+                ]
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.ApiManagement/service/apis', parameters('apimName'), 'business-ops-api')]"
+              ]
+            },
+            {
+              "type": "Microsoft.ApiManagement/service/apis/operations",
+              "apiVersion": "2023-09-01-preview",
+              "name": "[format('{0}/{1}/{2}', parameters('apimName'), 'business-ops-api', 'create-ticket')]",
+              "properties": {
+                "displayName": "Create Ticket",
+                "method": "POST",
+                "urlTemplate": "/api/tickets",
+                "description": "Create a new IT support ticket. Always search the knowledge base first.",
+                "request": {
+                  "representations": [
+                    {
+                      "contentType": "application/json",
+                      "examples": {
+                        "default": {
+                          "value": {
+                            "title": "Cannot connect to VPN",
+                            "description": "Error 800 when connecting from home.",
+                            "priority": "high",
+                            "category": "network",
+                            "requestedBy": "user@company.com"
+                          }
+                        }
+                      }
+                    }
+                  ]
+                },
+                "responses": [
+                  {
+                    "statusCode": 201,
+                    "description": "Ticket created"
+                  },
+                  {
+                    "statusCode": 400,
+                    "description": "Invalid request"
+                  }
+                ]
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.ApiManagement/service/apis', parameters('apimName'), 'business-ops-api')]"
+              ]
+            },
+            {
+              "type": "Microsoft.ApiManagement/service/apis/operations/policies",
+              "apiVersion": "2023-09-01-preview",
+              "name": "[format('{0}/{1}/{2}/{3}', parameters('apimName'), 'business-ops-api', 'create-ticket', 'policy')]",
+              "properties": {
+                "value": "[variables('writePolicyXml')]",
+                "format": "xml"
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.ApiManagement/service/apis/operations', parameters('apimName'), 'business-ops-api', 'create-ticket')]"
+              ]
+            },
+            {
+              "type": "Microsoft.ApiManagement/service/apis/operations",
+              "apiVersion": "2023-09-01-preview",
+              "name": "[format('{0}/{1}/{2}', parameters('apimName'), 'business-ops-api', 'update-ticket-status')]",
+              "properties": {
+                "displayName": "Update Ticket Status",
+                "method": "PATCH",
+                "urlTemplate": "/api/tickets/{id}/status",
+                "description": "Update the status of an existing support ticket. Setting status to resolved records the resolution time.",
+                "templateParameters": [
+                  {
+                    "name": "id",
+                    "description": "The ticket ID",
+                    "type": "string",
+                    "required": true
+                  }
+                ],
+                "request": {
+                  "representations": [
+                    {
+                      "contentType": "application/json",
+                      "examples": {
+                        "default": {
+                          "value": {
+                            "status": "resolved",
+                            "notes": "Issue fixed — rolled back last Windows update.",
+                            "updatedBy": "support@company.com"
+                          }
+                        }
+                      }
+                    }
+                  ]
+                },
+                "responses": [
+                  {
+                    "statusCode": 200,
+                    "description": "Ticket updated"
+                  },
+                  {
+                    "statusCode": 404,
+                    "description": "Ticket not found"
+                  }
+                ]
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.ApiManagement/service/apis', parameters('apimName'), 'business-ops-api')]"
+              ]
+            },
+            {
+              "type": "Microsoft.ApiManagement/service/apis/operations/policies",
+              "apiVersion": "2023-09-01-preview",
+              "name": "[format('{0}/{1}/{2}/{3}', parameters('apimName'), 'business-ops-api', 'update-ticket-status', 'policy')]",
+              "properties": {
+                "value": "[variables('writePolicyXml')]",
+                "format": "xml"
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.ApiManagement/service/apis/operations', parameters('apimName'), 'business-ops-api', 'update-ticket-status')]"
+              ]
+            },
+            {
+              "type": "Microsoft.ApiManagement/service/apis/operations",
+              "apiVersion": "2023-09-01-preview",
+              "name": "[format('{0}/{1}/{2}', parameters('apimName'), 'business-ops-api', 'search-knowledge-base')]",
+              "properties": {
+                "displayName": "Search Knowledge Base",
+                "method": "GET",
+                "urlTemplate": "/api/kb/search",
+                "description": "Search KB articles by keyword across title, summary, content, and tags. Call before creating a ticket.",
+                "request": {
+                  "queryParameters": [
+                    {
+                      "name": "q",
+                      "description": "Search query, e.g. \"VPN setup\", \"printer not working\"",
+                      "type": "string",
+                      "required": true
+                    },
+                    {
+                      "name": "category",
+                      "description": "Optional category filter",
+                      "type": "string",
+                      "required": false
+                    }
+                  ]
+                },
+                "responses": [
+                  {
+                    "statusCode": 200,
+                    "description": "List of matching KB articles"
+                  },
+                  {
+                    "statusCode": 400,
+                    "description": "Missing q parameter"
+                  }
+                ]
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.ApiManagement/service/apis', parameters('apimName'), 'business-ops-api')]"
+              ]
+            },
+            {
+              "type": "Microsoft.ApiManagement/service/apis/operations",
+              "apiVersion": "2023-09-01-preview",
+              "name": "[format('{0}/{1}/{2}', parameters('apimName'), 'business-ops-api', 'get-kb-article')]",
+              "properties": {
+                "displayName": "Get KB Article",
+                "method": "GET",
+                "urlTemplate": "/api/kb/{id}",
+                "description": "Retrieve the full content of a knowledge base article by its ID.",
+                "templateParameters": [
+                  {
+                    "name": "id",
+                    "description": "The KB article ID",
+                    "type": "string",
+                    "required": true
+                  }
+                ],
+                "responses": [
+                  {
+                    "statusCode": 200,
+                    "description": "KB article with full content"
+                  },
+                  {
+                    "statusCode": 404,
+                    "description": "Article not found"
+                  }
+                ]
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.ApiManagement/service/apis', parameters('apimName'), 'business-ops-api')]"
+              ]
+            }
+          ],
+          "outputs": {
+            "apiId": {
+              "type": "string",
+              "value": "[resourceId('Microsoft.ApiManagement/service/apis', parameters('apimName'), 'business-ops-api')]"
+            },
+            "apiName": {
+              "type": "string",
+              "value": "business-ops-api"
+            }
+          }
+        }
+      },
+      "dependsOn": [
+        "[extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, format('rg-{0}', parameters('environmentName'))), 'Microsoft.Resources/deployments', 'apim')]",
+        "[extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, format('rg-{0}', parameters('environmentName'))), 'Microsoft.Resources/deployments', 'functions')]",
+        "[subscriptionResourceId('Microsoft.Resources/resourceGroups', format('rg-{0}', parameters('environmentName')))]"
+      ]
+    }
+  ],
+  "outputs": {
+    "AZURE_RESOURCE_GROUP": {
+      "type": "string",
+      "value": "[format('rg-{0}', parameters('environmentName'))]"
+    },
+    "AZURE_LOCATION": {
+      "type": "string",
+      "value": "[parameters('location')]"
+    },
+    "AZURE_FUNCTION_APP_NAME": {
+      "type": "string",
+      "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, format('rg-{0}', parameters('environmentName'))), 'Microsoft.Resources/deployments', 'functions'), '2025-04-01').outputs.name.value]"
+    },
+    "AZURE_FUNCTION_APP_URL": {
+      "type": "string",
+      "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, format('rg-{0}', parameters('environmentName'))), 'Microsoft.Resources/deployments', 'functions'), '2025-04-01').outputs.functionAppUrl.value]"
+    },
+    "AZURE_APIM_NAME": {
+      "type": "string",
+      "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, format('rg-{0}', parameters('environmentName'))), 'Microsoft.Resources/deployments', 'apim'), '2025-04-01').outputs.name.value]"
+    },
+    "AZURE_APIM_GATEWAY_URL": {
+      "type": "string",
+      "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, format('rg-{0}', parameters('environmentName'))), 'Microsoft.Resources/deployments', 'apim'), '2025-04-01').outputs.gatewayUrl.value]"
+    },
+    "APPLICATIONINSIGHTS_CONNECTION_STRING": {
+      "type": "string",
+      "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, format('rg-{0}', parameters('environmentName'))), 'Microsoft.Resources/deployments', 'monitoring'), '2025-04-01').outputs.applicationInsightsConnectionString.value]"
+    },
+    "AZURE_LOG_ANALYTICS_WORKSPACE_ID": {
+      "type": "string",
+      "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, format('rg-{0}', parameters('environmentName'))), 'Microsoft.Resources/deployments', 'monitoring'), '2025-04-01').outputs.logAnalyticsWorkspaceId.value]"
+    }
+  }
+}

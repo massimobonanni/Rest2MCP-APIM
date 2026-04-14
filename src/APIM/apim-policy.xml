@@ -1,0 +1,204 @@
+<!--
+  Azure API Management - Full API-Level Policy
+  Business Operations Assistant — MCP Tool Manifest + REST API
+  
+  Named Values required:
+    - tenant-id            : Azure AD tenant ID (e.g. "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx")
+    - functions-base-url   : Base URL of the deployed Azure Function App (e.g. "https://myfuncapp.azurewebsites.net")
+    - apim-host            : APIM gateway hostname (e.g. "myapim.azure-api.net")
+    - eventhub-connection  : Event Hub connection string for usage logging
+-->
+<policies>
+
+  <!-- =========================================================
+       INBOUND
+       ========================================================= -->
+  <inbound>
+
+    <!-- 1. CORS — allow all origins for demo purposes -->
+    <cors allow-credentials="false">
+      <allowed-origins>
+        <origin>*</origin>
+      </allowed-origins>
+      <allowed-methods preflight-continue="false">
+        <method>GET</method>
+        <method>POST</method>
+        <method>PATCH</method>
+        <method>PUT</method>
+        <method>DELETE</method>
+        <method>OPTIONS</method>
+      </allowed-methods>
+      <allowed-headers>
+        <header>*</header>
+      </allowed-headers>
+    </cors>
+
+    <!-- 2. MCP Tool Manifest — return JSON manifest on GET /mcp -->
+    <choose>
+      <when condition="@(context.Request.Method == "GET" && context.Request.Url.Path.EndsWith("/mcp"))">
+        <return-response>
+          <set-status code="200" reason="OK" />
+          <set-header name="Content-Type" exists-action="override">
+            <value>application/json; charset=utf-8</value>
+          </set-header>
+          <set-body>@{
+            return "{\"schema_version\":\"v1\",\"name_for_human\":\"Business Operations Assistant\",\"name_for_model\":\"business_ops\",\"description_for_human\":\"Search products, manage inventory, create and track IT support tickets, and search the knowledge base.\",\"description_for_model\":\"Use these tools to help users with product searches, inventory checks, restock ordering, IT helpdesk ticket management, and knowledge base lookups. Always search the knowledge base before creating a ticket.\",\"auth\":{\"type\":\"service_http\",\"authorization_type\":\"bearer\"},\"api\":{\"type\":\"openapi\",\"url\":\"https://{{apim-host}}/mcp/openapi.json\"},\"tools\":[{\"name\":\"search_products\",\"description\":\"Search the product catalog by keyword and/or category. Returns matching products with pricing and SKU.\",\"parameters\":{\"type\":\"object\",\"properties\":{\"q\":{\"type\":\"string\",\"description\":\"Search keyword\"},\"category\":{\"type\":\"string\",\"description\":\"Filter by category: Electronics, Furniture, Office Supplies\"}}}},{\"name\":\"get_product\",\"description\":\"Get detailed information about a specific product by its ID.\",\"parameters\":{\"type\":\"object\",\"properties\":{\"id\":{\"type\":\"string\",\"description\":\"The product ID\"}},\"required\":[\"id\"]}},{\"name\":\"check_stock\",\"description\":\"Check the current stock level for a product. Returns available quantity, reorder threshold and warehouse location.\",\"parameters\":{\"type\":\"object\",\"properties\":{\"id\":{\"type\":\"string\",\"description\":\"The product ID to check stock for\"}},\"required\":[\"id\"]}},{\"name\":\"restock_product\",\"description\":\"Create a restock order for a product that is low on inventory.\",\"parameters\":{\"type\":\"object\",\"properties\":{\"productId\":{\"type\":\"string\",\"description\":\"The product ID to restock\"},\"quantity\":{\"type\":\"integer\",\"description\":\"Number of units to order\"},\"requestedBy\":{\"type\":\"string\",\"description\":\"Name or email of the person requesting the restock\"},\"notes\":{\"type\":\"string\",\"description\":\"Optional notes for the restock order\"}},\"required\":[\"productId\",\"quantity\",\"requestedBy\"]}},{\"name\":\"list_tickets\",\"description\":\"List IT support tickets. Can be filtered by status, priority, or assignee.\",\"parameters\":{\"type\":\"object\",\"properties\":{\"status\":{\"type\":\"string\",\"description\":\"Filter by status: open, in-progress, resolved, closed\"},\"priority\":{\"type\":\"string\",\"description\":\"Filter by priority: low, medium, high, critical\"},\"assignee\":{\"type\":\"string\",\"description\":\"Filter by assigned team member email\"}}}},{\"name\":\"get_ticket\",\"description\":\"Get full details of a specific support ticket by ID.\",\"parameters\":{\"type\":\"object\",\"properties\":{\"id\":{\"type\":\"string\",\"description\":\"The ticket ID\"}},\"required\":[\"id\"]}},{\"name\":\"create_ticket\",\"description\":\"Create a new IT support ticket. Always search the knowledge base first to see if the issue can be self-resolved.\",\"parameters\":{\"type\":\"object\",\"properties\":{\"title\":{\"type\":\"string\",\"description\":\"Short title describing the issue\"},\"description\":{\"type\":\"string\",\"description\":\"Detailed description of the problem\"},\"priority\":{\"type\":\"string\",\"description\":\"Priority level: low, medium, high, critical\"},\"category\":{\"type\":\"string\",\"description\":\"Category: hardware, software, network, access\"},\"requestedBy\":{\"type\":\"string\",\"description\":\"Email of the person reporting the issue\"}},\"required\":[\"title\",\"description\",\"priority\",\"category\",\"requestedBy\"]}},{\"name\":\"update_ticket_status\",\"description\":\"Update the status of an existing support ticket.\",\"parameters\":{\"type\":\"object\",\"properties\":{\"id\":{\"type\":\"string\",\"description\":\"The ticket ID to update\"},\"status\":{\"type\":\"string\",\"description\":\"New status: open, in-progress, resolved, closed\"},\"notes\":{\"type\":\"string\",\"description\":\"Notes explaining the status change\"},\"updatedBy\":{\"type\":\"string\",\"description\":\"Email of the person making the update\"}},\"required\":[\"id\",\"status\",\"updatedBy\"]}},{\"name\":\"search_knowledge_base\",\"description\":\"Search the IT knowledge base for articles, how-to guides and troubleshooting steps. Call this before creating a ticket.\",\"parameters\":{\"type\":\"object\",\"properties\":{\"q\":{\"type\":\"string\",\"description\":\"Search query, e.g. 'VPN setup', 'printer not working'\"},\"category\":{\"type\":\"string\",\"description\":\"Optional category filter\"}},\"required\":[\"q\"]}},{\"name\":\"get_kb_article\",\"description\":\"Get the full content of a knowledge base article by ID.\",\"parameters\":{\"type\":\"object\",\"properties\":{\"id\":{\"type\":\"string\",\"description\":\"The KB article ID\"}},\"required\":[\"id\"]}}]}";
+          }</set-body>
+        </return-response>
+      </when>
+    </choose>
+
+    <!-- 3. JWT Validation — validate Bearer tokens issued by Entra ID -->
+    <validate-jwt header-name="Authorization" failed-validation-httpcode="401"
+                  failed-validation-error-message="Unauthorized: valid Bearer token required."
+                  require-expiration-time="true" require-scheme="Bearer" require-signed-tokens="true">
+      <openid-config url="https://login.microsoftonline.com/{{tenant-id}}/v2.0/.well-known/openid-configuration" />
+      <audiences>
+        <audience>api://apim-mcp-demo</audience>
+      </audiences>
+      <issuers>
+        <issuer>https://login.microsoftonline.com/{{tenant-id}}/v2.0</issuer>
+        <issuer>https://sts.windows.net/{{tenant-id}}/</issuer>
+      </issuers>
+    </validate-jwt>
+
+    <!-- 4. Rate limiting — 60 calls per minute per subscription key -->
+    <rate-limit-by-key calls="60" renewal-period="60"
+                       counter-key="@(context.Subscription.Id ?? context.Request.IpAddress)"
+                       increment-condition="@(context.Response.StatusCode < 500)" />
+
+    <!-- 5. Request logging — trace tool name and subscription for usage analytics -->
+    <trace source="apim-mcp-demo" severity="information">
+      <message>@{
+        var path = context.Request.Url.Path;
+        var segments = path.Split('/');
+        var toolHint = segments.Length > 0 ? segments[segments.Length - 1] : "unknown";
+        var subscriptionId = context.Subscription?.Id ?? "anonymous";
+        return $"[MCP] tool={toolHint} subscription={subscriptionId} method={context.Request.Method} path={path}";
+      }</message>
+      <metadata name="subscription-id" value="@(context.Subscription?.Id ?? "anonymous")" />
+      <metadata name="request-path" value="@(context.Request.Url.Path)" />
+    </trace>
+
+    <!-- 6. Remove subscription key header before forwarding to backend -->
+    <set-header name="Ocp-Apim-Subscription-Key" exists-action="delete" />
+
+    <!-- 7. Response caching for GET requests — 60 seconds, vary by full URL -->
+    <cache-lookup vary-by-developer="false" vary-by-developer-groups="false"
+                  downstream-caching-type="none" must-revalidate="true">
+      <vary-by-query-parameter>*</vary-by-query-parameter>
+    </cache-lookup>
+
+    <!-- 8. Set backend service URL from Named Value -->
+    <set-backend-service base-url="{{functions-base-url}}" />
+
+  </inbound>
+
+  <!-- =========================================================
+       BACKEND
+       ========================================================= -->
+  <backend>
+    <forward-request follow-redirects="true" />
+  </backend>
+
+  <!-- =========================================================
+       OUTBOUND
+       ========================================================= -->
+  <outbound>
+
+    <!-- Cache successful GET responses for 60 seconds -->
+    <cache-store duration="60" />
+
+    <!-- Add standard security response headers -->
+    <set-header name="X-Content-Type-Options" exists-action="override">
+      <value>nosniff</value>
+    </set-header>
+    <set-header name="X-Frame-Options" exists-action="override">
+      <value>DENY</value>
+    </set-header>
+
+    <base />
+  </outbound>
+
+  <!-- =========================================================
+       ON-ERROR
+       ========================================================= -->
+  <on-error>
+    <set-header name="Content-Type" exists-action="override">
+      <value>application/json; charset=utf-8</value>
+    </set-header>
+    <set-body>@{
+      return "{\"success\":false,\"message\":\"" + context.LastError.Message + "\"}";
+    }</set-body>
+    <base />
+  </on-error>
+
+</policies>
+
+<!-- ================================================================
+     OPERATION-LEVEL POLICY OVERRIDES
+     Apply these as the operation-level policy for the specific routes.
+     ================================================================ -->
+
+<!-- ----------------------------------------------------------------
+     Override for POST /api/orders/restock  (CreateRestockOrder)
+     - Disable caching
+     - Validate JSON body
+     - Tag as write operation
+     ----------------------------------------------------------------
+<policies>
+  <inbound>
+    <base />
+    <cache-lookup-value key="disabled" variable-name="skip-cache" />
+    <validate-content unspecified-content-type-action="prevent" max-size="65536" size-exceeded-action="prevent" errors-variable-name="contentErrors">
+      <content type="application/json" validate-as="json" action="prevent" />
+    </validate-content>
+    <set-header name="X-Operation-Type" exists-action="override">
+      <value>write</value>
+    </set-header>
+  </inbound>
+  <outbound>
+    <base />
+  </outbound>
+</policies>
+-->
+
+<!-- ----------------------------------------------------------------
+     Override for POST /api/tickets  (CreateTicket)
+     - Disable caching
+     - Validate JSON body
+     - Tag as write operation
+     ----------------------------------------------------------------
+<policies>
+  <inbound>
+    <base />
+    <validate-content unspecified-content-type-action="prevent" max-size="65536" size-exceeded-action="prevent" errors-variable-name="contentErrors">
+      <content type="application/json" validate-as="json" action="prevent" />
+    </validate-content>
+    <set-header name="X-Operation-Type" exists-action="override">
+      <value>write</value>
+    </set-header>
+  </inbound>
+  <outbound>
+    <base />
+  </outbound>
+</policies>
+-->
+
+<!-- ----------------------------------------------------------------
+     Override for PATCH /api/tickets/{id}/status  (UpdateTicketStatus)
+     - Disable caching
+     - Validate JSON body
+     ----------------------------------------------------------------
+<policies>
+  <inbound>
+    <base />
+    <validate-content unspecified-content-type-action="prevent" max-size="65536" size-exceeded-action="prevent" errors-variable-name="contentErrors">
+      <content type="application/json" validate-as="json" action="prevent" />
+    </validate-content>
+  </inbound>
+  <outbound>
+    <base />
+  </outbound>
+</policies>
+-->

@@ -1,0 +1,31 @@
+<!--
+  Azure API Management — Operation-Level Policy Override
+  Applied to write operations: POST /api/orders/restock, POST /api/tickets,
+  PATCH /api/tickets/{id}/status
+  
+  Validates the request body as JSON and tags the operation as a write.
+  Cache-store is skipped because APIM does not cache non-GET responses.
+-->
+<policies>
+  <inbound>
+    <base />
+    <validate-content unspecified-content-type-action="prevent"
+                      max-size="65536"
+                      size-exceeded-action="prevent"
+                      errors-variable-name="contentErrors">
+      <content type="application/json" validate-as="json" action="prevent" />
+    </validate-content>
+    <set-header name="X-Operation-Type" exists-action="override">
+      <value>write</value>
+    </set-header>
+  </inbound>
+  <backend>
+    <base />
+  </backend>
+  <outbound>
+    <base />
+  </outbound>
+  <on-error>
+    <base />
+  </on-error>
+</policies>

@@ -1,0 +1,120 @@
+<!--
+  Azure API Management — API-Level Inbound Policy
+  Business Operations Assistant / MCP Tools
+  
+  Named Values consumed by this policy:
+    tenant-id            – Entra ID tenant GUID
+    functions-base-url   – Azure Function App base URL
+    apim-host            – APIM gateway hostname (used in MCP manifest)
+-->
+<policies>
+
+  <inbound>
+
+    <!-- CORS – allow all origins for demo -->
+    <cors allow-credentials="false">
+      <allowed-origins>
+        <origin>*</origin>
+      </allowed-origins>
+      <allowed-methods preflight-continue="false">
+        <method>GET</method>
+        <method>POST</method>
+        <method>PATCH</method>
+        <method>PUT</method>
+        <method>DELETE</method>
+        <method>OPTIONS</method>
+      </allowed-methods>
+      <allowed-headers>
+        <header>*</header>
+      </allowed-headers>
+    </cors>
+
+    <!-- MCP Tool Manifest – return JSON on GET /mcp -->
+    <choose>
+      <when condition="@(context.Request.Method == &quot;GET&quot; &amp;&amp; context.Request.Url.Path.EndsWith(&quot;/mcp&quot;))">
+        <return-response>
+          <set-status code="200" reason="OK" />
+          <set-header name="Content-Type" exists-action="override">
+            <value>application/json; charset=utf-8</value>
+          </set-header>
+          <set-body>@{
+            return "{\"schema_version\":\"v1\",\"name_for_human\":\"Business Operations Assistant\",\"name_for_model\":\"business_ops\",\"description_for_human\":\"Search products, manage inventory, create and track IT support tickets, and search the knowledge base.\",\"description_for_model\":\"Use these tools to help users with product searches, inventory checks, restock ordering, IT helpdesk ticket management, and knowledge base lookups. Always search the knowledge base before creating a ticket.\",\"auth\":{\"type\":\"service_http\",\"authorization_type\":\"bearer\"},\"api\":{\"type\":\"openapi\",\"url\":\"https://{{apim-host}}/mcp/openapi.json\"},\"tools\":[{\"name\":\"search_products\",\"description\":\"Search the product catalog by keyword and/or category.\",\"parameters\":{\"type\":\"object\",\"properties\":{\"q\":{\"type\":\"string\",\"description\":\"Search keyword\"},\"category\":{\"type\":\"string\",\"description\":\"Electronics, Furniture, Office Supplies\"}}}},{\"name\":\"get_product\",\"description\":\"Get detailed information about a specific product by its ID.\",\"parameters\":{\"type\":\"object\",\"properties\":{\"id\":{\"type\":\"string\"}},\"required\":[\"id\"]}},{\"name\":\"check_stock\",\"description\":\"Check the current stock level for a product.\",\"parameters\":{\"type\":\"object\",\"properties\":{\"id\":{\"type\":\"string\"}},\"required\":[\"id\"]}},{\"name\":\"restock_product\",\"description\":\"Create a restock order for a product low on inventory.\",\"parameters\":{\"type\":\"object\",\"properties\":{\"productId\":{\"type\":\"string\"},\"quantity\":{\"type\":\"integer\"},\"requestedBy\":{\"type\":\"string\"},\"notes\":{\"type\":\"string\"}},\"required\":[\"productId\",\"quantity\",\"requestedBy\"]}},{\"name\":\"list_tickets\",\"description\":\"List IT support tickets with optional filters.\",\"parameters\":{\"type\":\"object\",\"properties\":{\"status\":{\"type\":\"string\"},\"priority\":{\"type\":\"string\"},\"assignee\":{\"type\":\"string\"}}}},{\"name\":\"get_ticket\",\"description\":\"Get full details of a specific support ticket by ID.\",\"parameters\":{\"type\":\"object\",\"properties\":{\"id\":{\"type\":\"string\"}},\"required\":[\"id\"]}},{\"name\":\"create_ticket\",\"description\":\"Create a new IT support ticket. Always search the knowledge base first.\",\"parameters\":{\"type\":\"object\",\"properties\":{\"title\":{\"type\":\"string\"},\"description\":{\"type\":\"string\"},\"priority\":{\"type\":\"string\"},\"category\":{\"type\":\"string\"},\"requestedBy\":{\"type\":\"string\"}},\"required\":[\"title\",\"description\",\"priority\",\"category\",\"requestedBy\"]}},{\"name\":\"update_ticket_status\",\"description\":\"Update the status of an existing support ticket.\",\"parameters\":{\"type\":\"object\",\"properties\":{\"id\":{\"type\":\"string\"},\"status\":{\"type\":\"string\"},\"notes\":{\"type\":\"string\"},\"updatedBy\":{\"type\":\"string\"}},\"required\":[\"id\",\"status\",\"updatedBy\"]}},{\"name\":\"search_knowledge_base\",\"description\":\"Search the IT knowledge base. Call this before creating a ticket.\",\"parameters\":{\"type\":\"object\",\"properties\":{\"q\":{\"type\":\"string\"},\"category\":{\"type\":\"string\"}},\"required\":[\"q\"]}},{\"name\":\"get_kb_article\",\"description\":\"Get the full content of a knowledge base article by ID.\",\"parameters\":{\"type\":\"object\",\"properties\":{\"id\":{\"type\":\"string\"}},\"required\":[\"id\"]}}]}";
+          }</set-body>
+        </return-response>
+      </when>
+    </choose>
+
+    <!-- JWT Validation – Entra ID Bearer token required -->
+    <validate-jwt header-name="Authorization" failed-validation-httpcode="401"
+                  failed-validation-error-message="Unauthorized: valid Bearer token required."
+                  require-expiration-time="true" require-scheme="Bearer" require-signed-tokens="true">
+      <openid-config url="https://login.microsoftonline.com/{{tenant-id}}/v2.0/.well-known/openid-configuration" />
+      <audiences>
+        <audience>api://apim-mcp-demo</audience>
+      </audiences>
+      <issuers>
+        <issuer>https://login.microsoftonline.com/{{tenant-id}}/v2.0</issuer>
+        <issuer>https://sts.windows.net/{{tenant-id}}/</issuer>
+      </issuers>
+    </validate-jwt>
+
+    <!-- Rate limiting – 60 calls per minute per subscription -->
+    <rate-limit-by-key calls="60" renewal-period="60"
+                       counter-key="@(context.Subscription.Id ?? context.Request.IpAddress)"
+                       increment-condition="@(context.Response.StatusCode &lt; 500)" />
+
+    <!-- Usage tracing -->
+    <trace source="apim-mcp-demo" severity="information">
+      <message>@{
+        var path = context.Request.Url.Path;
+        var segments = path.Split('/');
+        var toolHint = segments.Length &gt; 0 ? segments[segments.Length - 1] : "unknown";
+        return string.Format("[MCP] tool={0} subscription={1} method={2}", toolHint, context.Subscription?.Id ?? "anonymous", context.Request.Method);
+      }</message>
+      <metadata name="subscription-id" value="@(context.Subscription?.Id ?? &quot;anonymous&quot;)" />
+      <metadata name="request-path" value="@(context.Request.Url.Path)" />
+    </trace>
+
+    <!-- Strip subscription key before forwarding to backend -->
+    <set-header name="Ocp-Apim-Subscription-Key" exists-action="delete" />
+
+    <!-- Response caching for GET requests – 60 seconds -->
+    <cache-lookup vary-by-developer="false" vary-by-developer-groups="false"
+                  downstream-caching-type="none" must-revalidate="true">
+      <vary-by-query-parameter>*</vary-by-query-parameter>
+    </cache-lookup>
+
+    <!-- Backend URL from Named Value -->
+    <set-backend-service base-url="{{functions-base-url}}" />
+
+  </inbound>
+
+  <backend>
+    <forward-request follow-redirects="true" />
+  </backend>
+
+  <outbound>
+
+    <!-- Cache successful GET responses -->
+    <cache-store duration="60" />
+
+    <!-- Security response headers -->
+    <set-header name="X-Content-Type-Options" exists-action="override">
+      <value>nosniff</value>
+    </set-header>
+    <set-header name="X-Frame-Options" exists-action="override">
+      <value>DENY</value>
+    </set-header>
+
+    <base />
+  </outbound>
+
+  <on-error>
+    <set-header name="Content-Type" exists-action="override">
+      <value>application/json; charset=utf-8</value>
+    </set-header>
+    <set-body>@("{\"success\":false,\"message\":\"" + context.LastError.Message + "\"}")</set-body>
+    <base />
+  </on-error>
+
+</policies>
