@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <TargetFramework>net8.0</TargetFramework>
@@ -7,6 +7,7 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <RootNamespace>ApimMcpDemo.Functions</RootNamespace>
+    <UserSecretsId>48774572-e0b3-401a-ab6d-5f5c394800ed</UserSecretsId>
   </PropertyGroup>
 
   <ItemGroup>
@@ -20,7 +21,8 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\ApimMcpDemo.Models\ApimMcpDemo.Models.csproj" />
+    <ProjectReference Include="..\ApimMcpDemo.RestModels\ApimMcpDemo.RestModels.csproj" />
+    <ProjectReference Include="..\ApimMcpDemo.Core\ApimMcpDemo.Core.csproj" />
   </ItemGroup>
 
   <ItemGroup>
