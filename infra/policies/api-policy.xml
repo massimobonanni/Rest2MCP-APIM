@@ -21,8 +21,8 @@
       </allowed-headers>
     </cors>
 
-    <!-- MCP Tool Manifest – return JSON on GET /mcp -->
-    <choose>
+  <!-- MCP Tool Manifest – return JSON on GET /mcp -->
+  <!--  <choose>
       <when condition="@(context.Request.Method == &quot;GET&quot; &amp;&amp; context.Request.Url.Path.EndsWith(&quot;/mcp&quot;))">
         <return-response>
           <set-status code="200" reason="OK" />
@@ -35,9 +35,10 @@
         </return-response>
       </when>
     </choose>
+-->
 
     <!-- JWT Validation – Entra ID Bearer token required -->
-    <validate-jwt header-name="Authorization" failed-validation-httpcode="401"
+    <!-- <validate-jwt header-name="Authorization" failed-validation-httpcode="401"
                   failed-validation-error-message="Unauthorized: valid Bearer token required."
                   require-expiration-time="true" require-scheme="Bearer" require-signed-tokens="true">
       <openid-config url="https://login.microsoftonline.com/{{tenant-id}}/v2.0/.well-known/openid-configuration" />
@@ -49,6 +50,7 @@
         <issuer>https://sts.windows.net/{{tenant-id}}/</issuer>
       </issuers>
     </validate-jwt>
+    -->
 
     <!-- Rate limiting – 60 calls per minute per subscription -->
     <rate-limit-by-key calls="60" renewal-period="60"
@@ -56,6 +58,7 @@
                        increment-condition="@(context.Response.StatusCode &lt; 500)" />
 
     <!-- Usage tracing -->
+    <!--
     <trace source="apim-mcp-demo" severity="information">
       <message>@{
         var path = context.Request.Url.Path;
@@ -66,7 +69,8 @@
       <metadata name="subscription-id" value="@(context.Subscription?.Id ?? &quot;anonymous&quot;)" />
       <metadata name="request-path" value="@(context.Request.Url.Path)" />
     </trace>
-
+    -->
+    
     <!-- Strip subscription key before forwarding to backend -->
     <set-header name="Ocp-Apim-Subscription-Key" exists-action="delete" />
 
