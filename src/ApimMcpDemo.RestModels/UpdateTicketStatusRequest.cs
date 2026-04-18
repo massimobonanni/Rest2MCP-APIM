@@ -1,4 +1,4 @@
-namespace ApimMcpDemo.Models;
+namespace ApimMcpDemo.RestModels;
 
 /// <summary>Request body for updating the status of a support ticket.</summary>
 public class UpdateTicketStatusRequest

@@ -1,4 +1,4 @@
-namespace ApimMcpDemo.Models;
+namespace ApimMcpDemo.RestModels;
 
 /// <summary>Request body for creating a new IT support ticket.</summary>
 public class CreateTicketRequest

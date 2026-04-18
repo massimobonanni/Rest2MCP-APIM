@@ -1,7 +1,8 @@
 using System.Net;
 using System.Text.Json;
-using ApimMcpDemo.Functions.Services;
-using ApimMcpDemo.Models;
+using ApimMcpDemo.Core.Entities;
+using ApimMcpDemo.Core.Interfaces;
+using ApimMcpDemo.RestModels;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Azure.Functions.Worker.Http;
 using Microsoft.Extensions.Logging;
@@ -14,7 +15,7 @@ namespace ApimMcpDemo.Functions.Functions;
 /// </summary>
 public class ProductsFunctions
 {
-    private readonly InMemoryDataStore _store;
+    private readonly IDataStore _store;
     private readonly ILogger<ProductsFunctions> _logger;
 
     private static readonly JsonSerializerOptions JsonOptions = new()
@@ -23,7 +24,7 @@ public class ProductsFunctions
         WriteIndented = false
     };
 
-    public ProductsFunctions(InMemoryDataStore store, ILogger<ProductsFunctions> logger)
+    public ProductsFunctions(IDataStore store, ILogger<ProductsFunctions> logger)
     {
         _store = store;
         _logger = logger;

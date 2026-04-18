@@ -102,14 +102,6 @@ resource functionApp 'Microsoft.Web/sites@2024-04-01' = {
           name: 'APPLICATIONINSIGHTS_CONNECTION_STRING'
           value: applicationInsightsConnectionString
         }
-        {
-          name: 'FUNCTIONS_EXTENSION_VERSION'
-          value: '~4'
-        }
-        {
-          name: 'FUNCTIONS_WORKER_RUNTIME'
-          value: 'dotnet-isolated'
-        }
       ]
     }
   }
@@ -149,12 +141,12 @@ resource storageQueueDataContributor 'Microsoft.Authorization/roleAssignments@20
 
 // Storage Table Data Contributor — for host instance tables
 resource storageTableDataContributor 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
-  name: guid(storageAccount.id, functionApp.id, '0a9a7e0f-7af4-b28a-8b19-81df0a06f4e7') 
+  name: guid(storageAccount.id, functionApp.id, '0a9a7e1f-b9d0-4cc4-a60d-0319b160aaa3') 
   scope: storageAccount
   properties: {
     roleDefinitionId: subscriptionResourceId(
       'Microsoft.Authorization/roleDefinitions',
-      '0a9a7e0f-7af4-b28a-8b19-81df0a06f4e7'  // Storage Table Data Contributor
+      '0a9a7e1f-b9d0-4cc4-a60d-0319b160aaa3'  // Storage Table Data Contributor
     )
     principalId: functionApp.identity.principalId
     principalType: 'ServicePrincipal'

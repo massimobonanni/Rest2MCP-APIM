@@ -1,7 +1,8 @@
 using System.Net;
 using System.Text.Json;
-using ApimMcpDemo.Functions.Services;
-using ApimMcpDemo.Models;
+using ApimMcpDemo.Core.Entities;
+using ApimMcpDemo.Core.Interfaces;
+using ApimMcpDemo.RestModels;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Azure.Functions.Worker.Http;
 using Microsoft.Extensions.Logging;
@@ -14,7 +15,7 @@ namespace ApimMcpDemo.Functions.Functions;
 /// </summary>
 public class TicketsFunctions
 {
-    private readonly InMemoryDataStore _store;
+    private readonly IDataStore _store;
     private readonly ILogger<TicketsFunctions> _logger;
 
     private static readonly JsonSerializerOptions JsonOptions = new()
@@ -25,7 +26,7 @@ public class TicketsFunctions
 
     private const string DefaultAssignee = "support-team@company.com";
 
-    public TicketsFunctions(InMemoryDataStore store, ILogger<TicketsFunctions> logger)
+    public TicketsFunctions(IDataStore store, ILogger<TicketsFunctions> logger)
     {
         _store = store;
         _logger = logger;

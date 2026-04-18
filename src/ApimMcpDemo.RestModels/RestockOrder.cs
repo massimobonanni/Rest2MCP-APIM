@@ -1,4 +1,4 @@
-namespace ApimMcpDemo.Models;
+namespace ApimMcpDemo.RestModels;
 
 /// <summary>Request body for creating a restock order.</summary>
 public class RestockOrder

@@ -16,14 +16,6 @@
       <allowed-origins>
         <origin>*</origin>
       </allowed-origins>
-      <allowed-methods preflight-continue="false">
-        <method>GET</method>
-        <method>POST</method>
-        <method>PATCH</method>
-        <method>PUT</method>
-        <method>DELETE</method>
-        <method>OPTIONS</method>
-      </allowed-methods>
       <allowed-headers>
         <header>*</header>
       </allowed-headers>

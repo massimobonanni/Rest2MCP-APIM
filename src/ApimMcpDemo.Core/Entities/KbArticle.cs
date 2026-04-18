@@ -1,4 +1,4 @@
-namespace ApimMcpDemo.Models;
+namespace ApimMcpDemo.Core.Entities;
 
 /// <summary>Represents a knowledge base article.</summary>
 public class KbArticle

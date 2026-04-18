@@ -1,7 +1,8 @@
 using System.Net;
 using System.Text.Json;
-using ApimMcpDemo.Functions.Services;
-using ApimMcpDemo.Models;
+using ApimMcpDemo.Core.Entities;
+using ApimMcpDemo.Core.Interfaces;
+using ApimMcpDemo.RestModels;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Azure.Functions.Worker.Http;
 using Microsoft.Extensions.Logging;
@@ -15,7 +16,7 @@ namespace ApimMcpDemo.Functions.Functions;
 /// </summary>
 public class KnowledgeBaseFunctions
 {
-    private readonly InMemoryDataStore _store;
+    private readonly IDataStore _store;
     private readonly ILogger<KnowledgeBaseFunctions> _logger;
 
     private static readonly JsonSerializerOptions JsonOptions = new()
@@ -24,7 +25,7 @@ public class KnowledgeBaseFunctions
         WriteIndented = false
     };
 
-    public KnowledgeBaseFunctions(InMemoryDataStore store, ILogger<KnowledgeBaseFunctions> logger)
+    public KnowledgeBaseFunctions(IDataStore store, ILogger<KnowledgeBaseFunctions> logger)
     {
         _store = store;
         _logger = logger;

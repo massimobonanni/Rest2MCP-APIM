@@ -1,4 +1,4 @@
-namespace ApimMcpDemo.Models;
+namespace ApimMcpDemo.Core.Entities;
 
 /// <summary>Represents an IT support ticket.</summary>
 public class Ticket

@@ -1,4 +1,4 @@
-namespace ApimMcpDemo.Models;
+namespace ApimMcpDemo.Core.Entities;
 
 /// <summary>Represents current stock level for a product.</summary>
 public class StockLevel

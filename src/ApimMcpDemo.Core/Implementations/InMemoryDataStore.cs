@@ -1,13 +1,14 @@
-using ApimMcpDemo.Models;
+using ApimMcpDemo.Core.Entities;
+using ApimMcpDemo.Core.Interfaces;
 
-namespace ApimMcpDemo.Functions.Services;
+namespace ApimMcpDemo.Core.Implementations;
 
 /// <summary>
 /// Thread-safe in-memory data store seeded with demo data for products,
 /// stock levels, IT support tickets, knowledge base articles, and restock orders.
 /// Registered as a singleton so all function invocations share the same state.
 /// </summary>
-public class InMemoryDataStore
+public class InMemoryDataStore : IDataStore
 {
     private readonly object _lock = new();
 

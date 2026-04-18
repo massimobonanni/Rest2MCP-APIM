@@ -1,4 +1,4 @@
-namespace ApimMcpDemo.Models;
+namespace ApimMcpDemo.Core.Entities;
 
 /// <summary>Result returned after a restock order is created.</summary>
 public class RestockOrderResult

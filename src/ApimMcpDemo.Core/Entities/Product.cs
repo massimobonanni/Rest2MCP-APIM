@@ -1,4 +1,4 @@
-namespace ApimMcpDemo.Models;
+namespace ApimMcpDemo.Core.Entities;
 
 /// <summary>Represents a product in the catalog.</summary>
 public class Product

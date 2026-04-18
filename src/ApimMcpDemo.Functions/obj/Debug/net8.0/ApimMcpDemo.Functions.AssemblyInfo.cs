@@ -10,10 +10,11 @@
 using System;
 using System.Reflection;
 
+[assembly: Microsoft.Extensions.Configuration.UserSecrets.UserSecretsIdAttribute("48774572-e0b3-401a-ab6d-5f5c394800ed")]
 [assembly: System.Reflection.AssemblyCompanyAttribute("ApimMcpDemo.Functions")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+21d72c1ec65b96d4752e7e56fc2398a9dc661d42")]
 [assembly: System.Reflection.AssemblyProductAttribute("ApimMcpDemo.Functions")]
 [assembly: System.Reflection.AssemblyTitleAttribute("ApimMcpDemo.Functions")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

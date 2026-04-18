@@ -1,4 +1,4 @@
-namespace ApimMcpDemo.Models;
+namespace ApimMcpDemo.RestModels;
 
 /// <summary>Generic API response wrapper.</summary>
 public class ApiResponse<T>
