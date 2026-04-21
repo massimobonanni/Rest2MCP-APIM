@@ -86,21 +86,6 @@ resource apiPolicy 'Microsoft.ApiManagement/service/apis/policies@2023-09-01-pre
 // ===========================================================================
 
 // ---------------------------------------------------------------------------
-// MCP Manifest — GET /mcp  (virtual; handled entirely by inbound policy)
-// ---------------------------------------------------------------------------
-
-resource opGetMcp 'Microsoft.ApiManagement/service/apis/operations@2023-09-01-preview' = {
-  parent: businessOpsApi
-  name: 'get-mcp-manifest'
-  properties: {
-    displayName: 'Get MCP Tool Manifest'
-    method: 'GET'
-    urlTemplate: '/mcp'
-    description: 'Returns the MCP tool manifest JSON. Handled by APIM policy — no backend call.'
-  }
-}
-
-// ---------------------------------------------------------------------------
 // Products — search_products  GET /api/products
 // ---------------------------------------------------------------------------
 
