@@ -4,113 +4,6 @@ Showcase how **Azure API Management (APIM)** can expose Azure Functions REST API
 **MCP (Model Context Protocol)** tools, making them directly consumable by AI agents
 (e.g. GitHub Copilot, Azure AI Foundry agents, or any MCP-compatible client).
 
----
-
-## Architecture
-
-```
-┌─────────────────────────────────────────────────────────────────────┐
-│                         AI Agent / Copilot                          │
-│              (reads MCP manifest, calls tools via HTTP)             │
-└────────────────────────────┬────────────────────────────────────────┘
-                             │ HTTPS + Bearer JWT
-                             ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│                  Azure API Management (APIM)                        │
-│                                                                     │
-│  GET /mcp          ──► Returns MCP Tool Manifest JSON               │
-│                                                                     │
-│  Inbound policies:                                                  │
-│    ✓ CORS                                                           │
-│    ✓ JWT validation (Entra ID)                                      │
-│    ✓ Rate limiting (60 req/min)                                     │
-│    ✓ Response caching (60s, GET only)                               │
-│    ✓ Request tracing / usage logging                                │
-│    ✓ Body validation (POST/PATCH)                                   │
-│    ✓ Backend URL rewrite                                            │
-└────────────────────────────┬────────────────────────────────────────┘
-                             │ Forwards to
-                             ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│               Azure Functions (Isolated Worker, .NET 8)             │
-│                                                                     │
-│  ProductsFunctions     GET /api/products                            │
-│                        GET /api/products/{id}                       │
-│                                                                     │
-│  InventoryFunctions    GET /api/products/{id}/stock                 │
-│                        POST /api/orders/restock                     │
-│                                                                     │
-│  TicketsFunctions      GET  /api/tickets                            │
-│                        GET  /api/tickets/{id}                       │
-│                        POST /api/tickets                            │
-│                        PATCH /api/tickets/{id}/status               │
-│                                                                     │
-│  KnowledgeBaseFunctions  GET /api/kb/search                         │
-│                          GET /api/kb/{id}                           │
-└─────────────────────────────────────────────────────────────────────┘
-```
-
----
-
-## MCP Tools exposed
-
-| Tool name               | HTTP method & route                     | Description                                  |
-|-------------------------|-----------------------------------------|----------------------------------------------|
-| `search_products`       | `GET /api/products`                     | Search product catalog by keyword/category   |
-| `get_product`           | `GET /api/products/{id}`                | Get a single product by ID                   |
-| `check_stock`           | `GET /api/products/{id}/stock`          | Check stock level and warehouse location     |
-| `restock_product`       | `POST /api/orders/restock`              | Create a restock order                       |
-| `list_tickets`          | `GET /api/tickets`                      | List IT tickets with optional filters        |
-| `get_ticket`            | `GET /api/tickets/{id}`                 | Get a single ticket by ID                    |
-| `create_ticket`         | `POST /api/tickets`                     | Open a new IT support ticket                 |
-| `update_ticket_status`  | `PATCH /api/tickets/{id}/status`        | Update ticket status                         |
-| `search_knowledge_base` | `GET /api/kb/search`                    | Search KB articles (search before ticketing) |
-| `get_kb_article`        | `GET /api/kb/{id}`                      | Get full KB article content                  |
-
----
-
-## Prerequisites
-
-| Tool | Version |
-|------|---------|
-| [.NET 8 SDK](https://dotnet.microsoft.com/download) | 8.0+ |
-| [Azure Functions Core Tools](https://learn.microsoft.com/azure/azure-functions/functions-run-local) | v4 |
-| [Azurite](https://learn.microsoft.com/azure/storage/common/storage-use-azurite) (local storage emulator) | latest |
-| [Azure CLI](https://learn.microsoft.com/cli/azure/install-azure-cli) | latest |
-| [Azure Developer CLI (azd)](https://learn.microsoft.com/azure/developer/azure-developer-cli/install-azd) | latest |
-| Azure Subscription | — |
-
----
-
-## Running locally
-
-### 1. Start Azurite (local Azure Storage emulator)
-
-```bash
-azurite --silent --location .azurite --debug .azurite/debug.log
-```
-
-Or via VS Code: use the **Azurite** extension and click **Start Azurite**.
-
-### 2. Restore and build
-
-```bash
-cd src
-dotnet restore ApimMcpDemo.sln
-dotnet build ApimMcpDemo.sln
-```
-
-### 3. Start the Function App
-
-```bash
-cd src/ApimMcpDemo.Functions
-func start
-```
-
-The runtime will print all registered HTTP endpoints. By default it listens on
-`http://localhost:7071`.
-
----
 
 ## Deploying to Azure
 
@@ -178,15 +71,85 @@ Key outputs:
 |---|---|
 | `AZURE_APIM_GATEWAY_URL` | APIM gateway base URL |
 | `AZURE_FUNCTION_APP_URL` | Function App direct URL |
-| `APPLICATIONINSIGHTS_CONNECTION_STRING` | App Insights connection string |
 
-Test the MCP manifest endpoint:
+### Step 5 - Add an MCP Server in Azure API Management using the Azure Portal
 
-```bash
-# Read the gateway URL from azd env
-APIM_HOST=$(azd env get-values | grep AZURE_APIM_GATEWAY_URL | cut -d= -f2 | tr -d '"')
+This step shows how to expose a REST API as an MCP (Model Context Protocol) tool through Azure API Management.
 
-curl "$APIM_HOST/mcp"
+#### Example: Adding the SearchProduct API to the Business-Operation-MCP Server
+
+##### Prerequisites
+- An Azure API Management instance already provisioned.
+- The **Business-Operation** API already imported in APIM (with at least the `SearchProduct` operation).
+
+---
+
+##### 5.1 – Navigate to your API Management instance
+
+1. Open the [Azure Portal](https://portal.azure.com).
+2. In the search bar, type **API Management** and select your instance.
+
+---
+
+##### 5.2 – Open the MCP Servers section
+
+1. In the left-hand menu, under **APIs**, click **MCP Servers**.
+2. The list of existing MCP Servers is displayed.
+
+---
+
+##### 5.3 – Create the MCP Server (if it does not exist yet)
+
+1. Click **+ Create** and choose **Expose an API as an MCP server**
+2. Fill in the form:
+   | Field | Value |
+   |---|---|
+   | **API** | Choose `Business Operations API` | 
+   | **API OPerations** | Select `[GET] Search Products` |
+   | **Display name** | `Business Operation MCP` |
+   | **Name** | `business-operation-mcp` |
+   | **Description** | `MCP Server exposing Business Operation REST APIs as tools` |
+3. Click **Create**.
+
+---
+
+##### 5.4 – Verify the MCP Server endpoint
+
+1. Back on the **Business-Operation-MCP** overview page, copy the **MCP Server URL**. It will look like:
+
+```
+https://<your-apim-name>.azure-api.net/business-operation-mcp/mcp
+```
+
+2. This is the endpoint your MCP-compatible client (e.g., GitHub Copilot, VS Code MCP extension) will connect to.
+
+---
+
+##### 5.6 – Test the MCP Server
+
+1. In VS Code, open **Settings** (`Ctrl+,`) and search for **MCP**.
+2. Add the server to your MCP client configuration:
+  
+```json
+{
+  "mcpServers": {
+    "business-operation-mcp": {
+      "type": "http",
+      "url": "https://<your-apim-name>.azure-api.net/business-operation-mcp/mcp",
+      "headers": {
+        "Ocp-Apim-Subscription-Key": "<your-subscription-key>"
+      }
+    }
+  }
+}
+```
+
+3. Reload the MCP client. The searchProducts tool should now appear in the tool list.
+
+4. Open GitHUb Copilot Chat and write the following prompt:
+
+```
+Create a report that contains the total number of products available. Add also a table with the list of products.
 ```
 
 ### Tear down
@@ -197,58 +160,37 @@ azd down
 
 ---
 
-## APIM Named Values
-
-All Named Values are populated automatically by the Bicep deployment:
-
-| Name | Value | Secret? |
-|------|-------|---------|
-| `tenant-id` | Entra ID tenant GUID (from `subscription().tenantId`) | No |
-| `functions-base-url` | Function App URL (from Bicep output) | No |
-| `apim-host` | APIM gateway hostname (from Bicep) | No |
-| `eventhub-connection` | Event Hub connection string (optional, set via `azd env set`) | Yes |
-
-To set the optional Event Hub connection string after deployment:
-
-```bash
-azd env set EVENTHUB_CONNECTION_STRING "<your-connection-string>"
-azd provision   # re-runs infra only, skips code deployment
-```
-
----
-
 ## Example curl commands
 
-> Replace `$APIM_HOST` with your APIM gateway hostname and `$TOKEN` with a valid
-> Entra ID Bearer token for the `api://apim-mcp-demo` audience.
-> For local testing (no APIM), use `http://localhost:7071` directly (no auth required).
+> Replace `$APIM_HOST` with your APIM gateway hostname and `$KEY` with a valid
+> Subscription Key in the API MAnagement.
 
 ### Search products
 
 ```bash
 curl "https://$APIM_HOST/api/products?q=keyboard" \
-  -H "Authorization: Bearer $TOKEN"
+  -H "Ocp-Apim-Subscription-Key: $KEY"
 ```
 
 ### Get a specific product
 
 ```bash
 curl "https://$APIM_HOST/api/products/prod-002" \
-  -H "Authorization: Bearer $TOKEN"
+  -H "Ocp-Apim-Subscription-Key: $KEY"
 ```
 
 ### Check stock level
 
 ```bash
 curl "https://$APIM_HOST/api/products/prod-005/stock" \
-  -H "Authorization: Bearer $TOKEN"
+  -H "Ocp-Apim-Subscription-Key: $KEY"
 ```
 
 ### Create a restock order
 
 ```bash
 curl -X POST "https://$APIM_HOST/api/orders/restock" \
-  -H "Authorization: Bearer $TOKEN" \
+  -H "Ocp-Apim-Subscription-Key: $KEY" \
   -H "Content-Type: application/json" \
   -d '{
     "productId": "prod-005",
@@ -262,21 +204,21 @@ curl -X POST "https://$APIM_HOST/api/orders/restock" \
 
 ```bash
 curl "https://$APIM_HOST/api/tickets?status=open" \
-  -H "Authorization: Bearer $TOKEN"
+  -H "Ocp-Apim-Subscription-Key: $KEY"
 ```
 
 ### Get a specific ticket
 
 ```bash
 curl "https://$APIM_HOST/api/tickets/tkt-001" \
-  -H "Authorization: Bearer $TOKEN"
+  -H "Ocp-Apim-Subscription-Key: $KEY"
 ```
 
 ### Create a ticket
 
 ```bash
 curl -X POST "https://$APIM_HOST/api/tickets" \
-  -H "Authorization: Bearer $TOKEN" \
+  -H "Ocp-Apim-Subscription-Key: $KEY" \
   -H "Content-Type: application/json" \
   -d '{
     "title": "Cannot install VS Code on new laptop",
@@ -291,7 +233,7 @@ curl -X POST "https://$APIM_HOST/api/tickets" \
 
 ```bash
 curl -X PATCH "https://$APIM_HOST/api/tickets/tkt-002/status" \
-  -H "Authorization: Bearer $TOKEN" \
+  -H "Ocp-Apim-Subscription-Key: $KEY" \
   -H "Content-Type: application/json" \
   -d '{
     "status": "resolved",
@@ -304,41 +246,22 @@ curl -X PATCH "https://$APIM_HOST/api/tickets/tkt-002/status" \
 
 ```bash
 curl "https://$APIM_HOST/api/kb/search?q=vpn+setup" \
-  -H "Authorization: Bearer $TOKEN"
+  -H "Ocp-Apim-Subscription-Key: $KEY"
 ```
 
 ### Get a KB article
 
 ```bash
 curl "https://$APIM_HOST/api/kb/kb-001" \
-  -H "Authorization: Bearer $TOKEN"
+  -H "Ocp-Apim-Subscription-Key: $KEY"
 ```
 
 ### Retrieve the MCP tool manifest
 
 ```bash
 curl "https://$APIM_HOST/mcp" \
-  -H "Authorization: Bearer $TOKEN"
+  -H "Ocp-Apim-Subscription-Key: $KEY"
 ```
-
----
-
-## Example AI Agent Prompt (MCP Tool Chaining)
-
-Use this prompt to test multi-step tool chaining with an MCP-compatible agent:
-
-> **"We are running low on office supplies. Check our inventory, identify all products
-> below their reorder threshold, and create restock orders for each of them."**
-
-**Expected agent behaviour:**
-
-1. Calls `search_products` with `category=Office Supplies` to list all office supply products.
-2. Calls `check_stock` for each returned product ID.
-3. Identifies products where `quantityAvailable < reorderThreshold`:
-   - `prod-005` — HP Toner (4 available, threshold 15)
-   - `prod-006` — A4 Paper (7 available, threshold 20)
-4. Calls `restock_product` for each understock product with an appropriate quantity.
-5. Reports back the created order IDs and confirmation.
 
 ---
 

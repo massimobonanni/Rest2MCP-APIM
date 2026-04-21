@@ -157,14 +157,5 @@ module apimApi './modules/apim-api.bicep' = {
 // Outputs  (UPPERCASE names are exposed as azd env vars)
 // ---------------------------------------------------------------------------
 
-output AZURE_RESOURCE_GROUP string = rg.name
-output AZURE_LOCATION string = location
-
-output AZURE_FUNCTION_APP_NAME string = functions.outputs.name
 output AZURE_FUNCTION_APP_URL string = functions.outputs.functionAppUrl
-
-output AZURE_APIM_NAME string = apim.outputs.name
 output AZURE_APIM_GATEWAY_URL string = apim.outputs.gatewayUrl
-
-output APPLICATIONINSIGHTS_CONNECTION_STRING string = monitoring.outputs.applicationInsightsConnectionString
-output AZURE_LOG_ANALYTICS_WORKSPACE_ID string = monitoring.outputs.logAnalyticsWorkspaceId

@@ -29,24 +29,6 @@ var apiPolicyXml = loadTextContent('../policies/api-policy.xml')
 var writePolicyXml = loadTextContent('../policies/op-write-policy.xml')
 
 // ---------------------------------------------------------------------------
-// APIM Backend — points to the Azure Function App
-// ---------------------------------------------------------------------------
-
-resource functionsBackend 'Microsoft.ApiManagement/service/backends@2023-09-01-preview' = {
-  parent: apim
-  name: 'functions-backend'
-  properties: {
-    protocol: 'http'
-    url: functionAppUrl
-    tls: {
-      validateCertificateChain: true
-      validateCertificateName: true
-    }
-    description: 'Azure Functions backend for Business Operations MCP tools'
-  }
-}
-
-// ---------------------------------------------------------------------------
 // API definition
 // ---------------------------------------------------------------------------
 
@@ -61,11 +43,10 @@ resource businessOpsApi 'Microsoft.ApiManagement/service/apis@2023-09-01-preview
       'https'
     ]
     path: ''                  // Empty path — function routes already include full paths
-    serviceUrl: functionAppUrl
     isCurrent: true
     apiType: 'http'
+    serviceUrl: functionAppUrl
   }
-  dependsOn: [functionsBackend]
 }
 
 // ---------------------------------------------------------------------------
@@ -445,6 +426,55 @@ resource opGetKbArticle 'Microsoft.ApiManagement/service/apis/operations@2023-09
     ]
   }
 }
+
+// ---------------------------------------------------------------------------
+// MCP Definition
+// ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
+// Business Operation MCP
+// ---------------------------------------------------------------------------
+/*
+resource businessOpsMcp 'Microsoft.ApiManagement/service/apis@2025-03-01-preview' = {
+  parent: apim
+  name: 'business-ops-mcp'
+  properties: {
+    type: 'mcp'
+    isCurrent: true
+    apiRevision: '1'
+    subscriptionRequired: false
+    path: 'business-operation-mcp'
+    protocols: [
+      'https'
+    ]
+    authenticationSettings: {
+      oAuth2AuthenticationSettings: []
+      openidAuthenticationSettings: []
+    }
+    subscriptionKeyParameterNames: {
+      header: 'Ocp-Apim-Subscription-Key'
+      query: 'subscription-key'
+    }
+    displayName: 'Business Operations MCP'
+    description: 'MCP definition for Business Operations tools, including product catalog, inventory, IT helpdesk, and knowledge base.'
+  }
+}
+*/
+
+// ---------------------------------------------------------------------------
+// MCP Tool — Search Products
+// ---------------------------------------------------------------------------
+/*
+resource mcpToolSearchProducts 'Microsoft.ApiManagement/service/apis/tools@2025-03-01-preview' = {
+  parent: businessOpsMcp
+  name: 'search-products'
+  properties: {
+    displayName: 'searchProducts'
+    description: 'Search the product catalog by keyword and/or category.'
+    operationId: opSearchProducts.id
+  }
+}
+*/
 
 // ---------------------------------------------------------------------------
 // Outputs
